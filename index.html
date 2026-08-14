@@ -103,56 +103,117 @@
     pointer-events: none;
     display: none;
     font-weight: 700;
+    /* 移动端 UI 按屏宽缩放（--ui-scale = 容器宽度/960，由 touch.js 计算） */
+    --ui-scale: 1;
+    font-size: calc(14px * var(--ui-scale));
   }
   #hud.visible { display: block; }
 
-  .hud-top { position: absolute; top: 10px; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 0 14px; }
-  .hud-lap { font-size: 18px; color: #ffd23f; background: rgba(0,0,0,.45); padding: 4px 12px; border-radius: 8px; }
-  .hud-timer { font-size: 22px; color: #fff; background: rgba(0,0,0,.45); padding: 4px 12px; border-radius: 8px; font-variant-numeric: tabular-nums; }
+  .hud-top { position: absolute; top: calc(10px * var(--ui-scale)); left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 0 calc(14px * var(--ui-scale)); }
+  .hud-lap { font-size: calc(18px * var(--ui-scale)); color: #ffd23f; background: rgba(0,0,0,.45); padding: calc(4px * var(--ui-scale)) calc(12px * var(--ui-scale)); border-radius: calc(8px * var(--ui-scale)); }
+  .hud-timer { font-size: calc(22px * var(--ui-scale)); color: #fff; background: rgba(0,0,0,.45); padding: calc(4px * var(--ui-scale)) calc(12px * var(--ui-scale)); border-radius: calc(8px * var(--ui-scale)); font-variant-numeric: tabular-nums; }
   #rankText {
-    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-    font-size: 30px; color: #fff;
+    position: absolute; top: calc(10px * var(--ui-scale)); left: 50%; transform: translateX(-50%);
+    font-size: calc(30px * var(--ui-scale)); color: #fff;
     text-shadow: 0 0 12px rgba(255,210,63,.9), 2px 2px 0 rgba(0,0,0,.6);
-    background: rgba(0,0,0,.35); padding: 2px 18px; border-radius: 999px;
+    background: rgba(0,0,0,.35); padding: calc(2px * var(--ui-scale)) calc(18px * var(--ui-scale)); border-radius: 999px;
   }
 
   #speedBox {
     position: absolute; left: 14px; bottom: 14px;
     visibility: hidden; /* 视觉由 Canvas 指针式速度表接管（DOM 保留供测试读取） */
   }
-  #speedValue { font-size: 34px; color: #4ae34a; font-variant-numeric: tabular-nums; line-height: 1; }
+  #speedValue { font-size: calc(34px * var(--ui-scale)); color: #4ae34a; font-variant-numeric: tabular-nums; line-height: 1; }
   .speed-unit { font-size: 12px; color: #aad; letter-spacing: 2px; }
 
   #splitText {
-    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-    font-size: 16px; background: rgba(0,0,0,.5); padding: 4px 14px; border-radius: 8px;
+    position: absolute; bottom: calc(14px * var(--ui-scale)); left: 50%; transform: translateX(-50%);
+    font-size: calc(16px * var(--ui-scale)); background: rgba(0,0,0,.5); padding: calc(4px * var(--ui-scale)) calc(14px * var(--ui-scale)); border-radius: calc(8px * var(--ui-scale));
     visibility: hidden;
   }
   #splitText.good { color: #6fe36f; }
   #splitText.bad  { color: #ff7b6b; }
 
   #powerupSlot {
-    position: absolute; right: 14px; bottom: 14px;
-    width: 64px; height: 64px;
+    position: absolute; right: calc(14px * var(--ui-scale)); bottom: calc(14px * var(--ui-scale));
+    width: calc(64px * var(--ui-scale)); height: calc(64px * var(--ui-scale));
     background: rgba(0,0,0,.5); border: 2px dashed rgba(255,255,255,.35);
-    border-radius: 12px;
+    border-radius: calc(12px * var(--ui-scale));
     display: flex; align-items: center; justify-content: center;
-    font-size: 34px;
+    font-size: calc(34px * var(--ui-scale));
   }
+  /* 移动端：道具槽上移，避免与加速/漂移按钮重叠 */
+  body.mobile #powerupSlot { bottom: calc(128px * var(--ui-scale)); }
 
   #opponents {
-    position: absolute; top: 50%; left: 8px; transform: translateY(-50%);
-    display: flex; flex-direction: column; gap: 6px;
+    position: absolute; top: 50%; left: calc(8px * var(--ui-scale)); transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: calc(6px * var(--ui-scale));
   }
   .opp-tag {
-    font-size: 12px; color: #cfe6ff;
-    background: rgba(0,0,0,.45); padding: 2px 8px; border-radius: 6px;
+    font-size: calc(12px * var(--ui-scale)); color: #cfe6ff;
+    background: rgba(0,0,0,.45); padding: calc(2px * var(--ui-scale)) calc(8px * var(--ui-scale)); border-radius: calc(6px * var(--ui-scale));
   }
 
+  /* ================= 触屏控制（移动端，Step 9） ================= */
+  #touchControls {
+    position: absolute; inset: 0;
+    z-index: 15; pointer-events: none;
+    display: none;
+    touch-action: none;
+  }
+  body.mobile #touchControls { display: block; }
+  body.mobile { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+  #joystickZone {
+    position: absolute; left: calc(14px * var(--ui-scale)); bottom: calc(14px * var(--ui-scale));
+    width: calc(150px * var(--ui-scale)); height: calc(150px * var(--ui-scale));
+    pointer-events: auto; touch-action: none;
+  }
+  #joystickBase {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: calc(132px * var(--ui-scale)); height: calc(132px * var(--ui-scale));
+    border-radius: 50%;
+    background: rgba(255,255,255,.14);
+    border: 2px solid rgba(255,255,255,.35);
+    box-sizing: border-box;
+  }
+  #joystickKnob {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: calc(56px * var(--ui-scale)); height: calc(56px * var(--ui-scale));
+    border-radius: 50%;
+    background: rgba(255,255,255,.5);
+    border: 2px solid rgba(255,255,255,.6);
+    box-sizing: border-box;
+  }
+  #touchButtons {
+    position: absolute; right: calc(14px * var(--ui-scale)); bottom: calc(14px * var(--ui-scale));
+    display: flex; align-items: flex-end; gap: calc(16px * var(--ui-scale));
+    pointer-events: none;
+  }
+  .touch-btn {
+    pointer-events: auto; touch-action: none;
+    border-radius: 50%; border: 2px solid rgba(255,255,255,.45);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,.6);
+    user-select: none; -webkit-user-select: none;
+  }
+  #btnGas   { width: calc(96px * var(--ui-scale)); height: calc(96px * var(--ui-scale)); background: rgba(255,80,60,.4); font-size: calc(16px * var(--ui-scale)); }
+  #btnDrift { width: calc(62px * var(--ui-scale)); height: calc(62px * var(--ui-scale)); background: rgba(80,160,255,.4); font-size: calc(12px * var(--ui-scale)); }
+
+  /* ================= 竖屏提示（移动端） ================= */
+  #rotateOverlay {
+    position: absolute; inset: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(8,18,32,.94);
+    color: #fff; font-size: 22px; text-align: center;
+  }
+  #rotateOverlay .rot-icon { font-size: 56px; margin-bottom: 14px; display: block; }
+  #rotateOverlay.hidden { display: none; }
+
   /* ================= 结束界面 ================= */
-  #finishedTitle { font-size: 46px; color: #ffd23f; text-shadow: 3px 3px 0 #c0392b; }
-  #resultText { font-size: 20px; color: #eaf6ff; line-height: 1.8; }
-  #leaderboardBox { font-size: 15px; color: #ffe9a8; background: rgba(0,0,0,.3); padding: 10px 20px; border-radius: 10px; line-height: 1.9; }
+  #finishedTitle { font-size: calc(46px * var(--ui-scale)); color: #ffd23f; text-shadow: 3px 3px 0 #c0392b; }
+  #resultText { font-size: calc(20px * var(--ui-scale)); color: #eaf6ff; line-height: 1.8; }
+  #leaderboardBox { font-size: calc(15px * var(--ui-scale)); color: #ffe9a8; background: rgba(0,0,0,.3); padding: calc(10px * var(--ui-scale)) calc(20px * var(--ui-scale)); border-radius: 10px; line-height: 1.9; }
 </style>
 </head>
 <body data-state="menu">
@@ -197,6 +258,22 @@
     <div id="splitText"></div>
     <div id="powerupSlot">—</div>
     <div id="opponents"></div>
+  </div>
+
+  <!-- ========== 触屏控制（移动端，Step 9） ========== -->
+  <div id="touchControls">
+    <div id="joystickZone">
+      <div id="joystickBase"><div id="joystickKnob"></div></div>
+    </div>
+    <div id="touchButtons">
+      <div id="btnGas" class="touch-btn">加速</div>
+      <div id="btnDrift" class="touch-btn">漂移</div>
+    </div>
+  </div>
+
+  <!-- ========== 竖屏提示（移动端） ========== -->
+  <div id="rotateOverlay" class="hidden">
+    <div><span class="rot-icon">🔄</span><br>请横屏游玩</div>
   </div>
 
 </div>
@@ -1564,9 +1641,13 @@ class Game {
     }
   }
 
-  /** 触发屏幕震动（幅度 5px，时长默认 150ms） */
+  /** 触发屏幕震动（幅度 5px，时长默认 150ms）；碰撞时手机震动 50ms（触屏适配） */
   _shake(dur) {
+    const wasZero = this.shakeT <= 0;
     this.shakeT = Math.max(this.shakeT, dur || 0.15);
+    if (wasZero && navigator.vibrate) {
+      try { navigator.vibrate(50); } catch (e) { /* 不支持震动时忽略 */ }
+    }
   }
 
   /** 生成浮动鼓励文字（上飘 + 淡出） */
@@ -1838,9 +1919,15 @@ class Game {
     }
   }
 
-  /** 指针式模拟速度表（0~300 km/h，左下角） */
+  /**
+   * 指针式模拟速度表（0~300 km/h）
+   * PC：左下角；移动端：移至左上角（缩小），为左下摇杆让位
+   */
   _drawSpeedometer(ctx) {
-    const cx = 92, cy = 548, R = 66;
+    const isMobile = document.body.classList.contains('mobile');
+    const cx = isMobile ? 88 : 92;
+    const cy = isMobile ? 118 : 548;
+    const R = isMobile ? 56 : 66;
     ctx.save();
     // 表盘（上半圆）
     ctx.fillStyle = 'rgba(10,15,25,0.78)';
@@ -2008,6 +2095,10 @@ class Game {
 window.addEventListener('DOMContentLoaded', () => {
   const game = new Game();
   game.init();
+  // 触屏适配（Step 9）：移动端自动切换触屏控制；PC 键盘不受影响
+  if (typeof TouchControls !== 'undefined') {
+    TouchControls.init(game);
+  }
   // 联机模块自检（Step 1）：记录 Playroom Kit 可用性，供 UI 与测试读取
   if (typeof Multiplayer !== 'undefined') {
     game.multiplayerAvailable = Multiplayer.checkAvailable();
@@ -2029,6 +2120,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 </script>
+<!-- 触屏适配模块（移动端摇杆/按钮/竖屏提示/UI 缩放） -->
+<script src="touch.js"></script>
 <!-- 多人联机模块（Playroom Kit 封装，Step 1 起逐步实现） -->
 <script src="multiplayer.js"></script>
 </body>
