@@ -125,18 +125,20 @@ const TouchControls = {
     const zone = document.getElementById('swipeZone');
     if (!zone) return;
     const DEAD = 0.18;
-    let pid = null, sx = 0, sy = 0;
+    let pid = null, sx = 0, sy = 0, lx = 0, ly = 0;
+    this._swipeDebug = () => ({ pid, sx, sy }); // 调试探针
 
     const onDown = (e) => {
       if (pid !== null) return;
       pid = e.pointerId;
       try { zone.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件忽略 */ }
-      sx = e.clientX; sy = e.clientY;
+      sx = e.clientX; sy = e.clientY; lx = sx; ly = sy;
     };
     const onMove = (e) => {
       if (e.pointerId !== pid) return;
       e.preventDefault();
-      let dx = (e.clientX - sx) / 60; // 滑动灵敏度与摇杆一致
+      lx = e.clientX; ly = e.clientY;
+      let dx = (lx - sx) / 60; // 滑动灵敏度与摇杆一致
       if (dx > 1) dx = 1; else if (dx < -1) dx = -1;
       const s = Math.abs(dx) < DEAD ? 0 : dx;
       this.game.keys.steer = s;
@@ -145,8 +147,9 @@ const TouchControls = {
     };
     const onUp = (e) => {
       if (e.pointerId !== pid) return;
-      const dy = sy - e.clientY;
-      const dxAbs = Math.abs(e.clientX - sx);
+      // 用最近一次移动坐标判定（pointerup 坐标可能滞后/缺失）
+      const dy = sy - ly;
+      const dxAbs = Math.abs(lx - sx);
       if (dy > 40 && dxAbs < 40) {
         this.game.keys.item = true; // 上滑使用道具
         this.vibrate(10);
