@@ -244,6 +244,16 @@
   #finishedTitle { font-size: calc(46px * var(--ui-scale)); color: #ffd23f; text-shadow: 3px 3px 0 #c0392b; }
   #resultText { font-size: calc(20px * var(--ui-scale)); color: #eaf6ff; line-height: 1.8; }
   #leaderboardBox { font-size: calc(15px * var(--ui-scale)); color: #ffe9a8; background: rgba(0,0,0,.3); padding: calc(10px * var(--ui-scale)) calc(20px * var(--ui-scale)); border-radius: 10px; line-height: 1.9; }
+
+  /* ================= 菜单设置（P1-8 转向灵敏度） ================= */
+  .menu-setting {
+    display: flex; align-items: center; gap: 12px;
+    font-size: calc(14px * var(--ui-scale)); color: #d6e9ff;
+    background: rgba(0,0,0,.25); padding: calc(8px * var(--ui-scale)) calc(16px * var(--ui-scale));
+    border-radius: 999px;
+  }
+  .menu-setting input[type="range"] { width: calc(150px * var(--ui-scale)); accent-color: #ffd23f; }
+  #steerSensVal { min-width: calc(44px * var(--ui-scale)); color: #ffd23f; font-weight: 700; }
 </style>
 </head>
 <body data-state="menu">
@@ -256,6 +266,11 @@
     <div class="game-subtitle">风格网页小游戏</div>
     <button id="startBtn" class="btn">联 机 对 战</button>
     <button id="soloBtn" class="btn secondary">单 人 游 戏</button>
+    <div class="menu-setting">
+      <label for="steerSens">转向灵敏度</label>
+      <input type="range" id="steerSens" min="0.5" max="1.5" step="0.05" value="1.0">
+      <span id="steerSensVal">1.0x</span>
+    </div>
     <div id="mpStatus" class="mp-status"></div>
     <div class="controls-hint">
       <b>↑</b> 加速 &nbsp; <b>←→</b> 转向 &nbsp; <b>Space</b> 漂移 &nbsp; <b>Z</b> 道具<br>
@@ -884,8 +899,9 @@ class Player extends Vehicle {
    * 依据输入状态驾驶，返回是否完成一圈
    * 漂移：按住 Space（且速度 >5）进入漂移，速度向 80% 收敛、转向 ×1.6；
    * 松开：漂移 ≥0.3s 触发 1.5s 小喷（上限 +30%）
+   * @param {number} [sensitivity] 转向灵敏度倍数（P1-8，默认 1）
    */
-  update(dt, track, keys) {
+  update(dt, track, keys, sensitivity) {
     // 打滑期间失去控制（无法转向 / 漂移 / 加速）
     if (this.slipTimer <= 0) {
       const drifting = keys.drift && this.speed > 5;
@@ -902,11 +918,12 @@ class Player extends Vehicle {
       }
       if (this.isDrifting) this.driftTime += dt;
 
-      // 转向（漂移时更灵）
-      let steer = 0;
-      if (keys.left) steer -= 1;
-      if (keys.right) steer += 1;
-      if (steer !== 0) this.steer(steer, dt, this.isDrifting ? 1.6 : 1);
+      // 转向（P1-8 比例转向 + 灵敏度）：摇杆 keys.steer 优先，键盘为 ±1
+      let raw = 0;
+      if (typeof keys.steer === 'number' && keys.steer !== 0) raw = keys.steer;
+      else raw = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      const steer = raw * (sensitivity || 1);
+      if (steer < -0.02 || steer > 0.02) this.steer(steer, dt, this.isDrifting ? 1.6 : 1);
 
       // 纵向控制（小喷期间全力加速，忽略滑行阻力）
       if (this.isDrifting) {
@@ -1170,6 +1187,12 @@ class Game {
     this.prevOffTrack = false;  // 玩家上一帧是否出界
     // ---- HUD 升级（Step 8） ----
     this.splitTimer = 0;        // 分段计时显示剩余时间（秒）
+    // ---- 转向灵敏度（P1-8，localStorage 持久化） ----
+    this.steerSensitivity = 1.0;
+    try {
+      const saved = parseFloat(localStorage.getItem('marioKart.steerSens'));
+      if (saved >= 0.5 && saved <= 1.5) this.steerSensitivity = saved;
+    } catch (e) { /* 忽略 */ }
     // ---- 联机模式（Step 3+） ----
     this.multiplayerMode = false; // 联机对战模式
     this.remotePlayers = {};    // 远程玩家 { playerId: { player, color, name, car } }
@@ -1195,6 +1218,19 @@ class Game {
     document.getElementById('startBtn').addEventListener('click', () => this.startMultiplayer());
     document.getElementById('soloBtn').addEventListener('click', () => this.start());
     document.getElementById('restartBtn').addEventListener('click', () => this.restart());
+    // 转向灵敏度滑块（P1-8）：实时生效 + localStorage 持久化
+    const sensInput = document.getElementById('steerSens');
+    const sensVal = document.getElementById('steerSensVal');
+    if (sensInput && sensVal) {
+      sensInput.value = String(this.steerSensitivity);
+      sensVal.textContent = this.steerSensitivity.toFixed(1) + 'x';
+      sensInput.addEventListener('input', () => {
+        const v = parseFloat(sensInput.value) || 1;
+        this.steerSensitivity = v;
+        sensVal.textContent = v.toFixed(1) + 'x';
+        try { localStorage.setItem('marioKart.steerSens', String(v)); } catch (e) { /* 忽略 */ }
+      });
+    }
     // 联机状态提示
     const st = document.getElementById('mpStatus');
     if (st) {
@@ -1637,7 +1673,7 @@ class Game {
     if (this.state === STATE.RACING) {
       this.raceTimeMs += dt * 1000;
       HUD.setTimer(this.raceTimeMs);
-      if (this.player.update(dt, Track, this.keys)) this._onLapComplete();
+      if (this.player.update(dt, Track, this.keys, this.steerSensitivity)) this._onLapComplete();
       for (const ai of this.ais) ai.update(dt, Track, this.ais);
 
       // ---- 联机状态同步（Step 3+5）：发布本机 + 拉取远程（约 15Hz） ----
