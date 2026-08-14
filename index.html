@@ -212,7 +212,10 @@
     width: calc(72px * var(--ui-scale)); height: calc(72px * var(--ui-scale));
     background: rgba(255,200,60,.4);
     font-size: calc(14px * var(--ui-scale));
+    transition: opacity .15s ease;
   }
+  /* 无道具时置灰（P0-2） */
+  #btnItem.disabled { opacity: .28; filter: grayscale(1); }
 
   /* ================= 竖屏提示（移动端） ================= */
   #rotateOverlay {
@@ -1647,6 +1650,8 @@ class Game {
       this._updateBananas(dt);
       // 道具槽 HUD
       HUD.setPowerUp(this.player.item ? PowerUp.ICONS[this.player.item] : null);
+      // 触屏控件状态（道具按钮置灰等）
+      if (typeof TouchControls !== 'undefined') TouchControls.update(this);
 
       this._collideVehicles();
       this._updateRank();

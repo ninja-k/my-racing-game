@@ -53,6 +53,13 @@ const TouchControls = {
     window.addEventListener('resize', () => this.updateScale());
   },
 
+  /* ---------- 每帧更新（P0-2：道具按钮随持有状态置灰） ---------- */
+  update(game) {
+    if (!this.isMobile) return;
+    const hasItem = !!(game && game.player && game.player.item);
+    this.el.item.classList.toggle('disabled', !hasItem);
+  },
+
   /* ---------- 跟随式摇杆（转向，P0-1） ---------- */
   _bindJoystick() {
     const zone = this.el.zone;
