@@ -1,0 +1,18 @@
+{
+  "name": "马力欧赛车风格网页小游戏",
+  "short_name": "马力欧赛车",
+  "description": "单机 + 2-4 人联机竞速小游戏（Playroom Kit）",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b1d2e",
+  "theme_color": "#0b1d2e",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
