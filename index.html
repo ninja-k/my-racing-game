@@ -193,8 +193,8 @@
     transition: transform .08s ease-out; /* 松手平滑回中 */
   }
   #touchButtons {
-    position: absolute; right: calc(14px * var(--ui-scale)); bottom: calc(14px * var(--ui-scale));
-    display: flex; align-items: flex-end; gap: calc(16px * var(--ui-scale));
+    position: absolute; right: calc(16px * var(--ui-scale)); bottom: calc(16px * var(--ui-scale));
+    display: flex; align-items: flex-end; gap: calc(22px * var(--ui-scale)); /* ≥20px 防误触 */
     pointer-events: none;
   }
   .touch-btn {
@@ -203,16 +203,16 @@
     display: flex; align-items: center; justify-content: center;
     color: #fff; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,.6);
     user-select: none; -webkit-user-select: none;
+    transition: transform .08s ease, opacity .15s ease;
   }
-  #btnGas   { width: calc(96px * var(--ui-scale)); height: calc(96px * var(--ui-scale)); background: rgba(255,80,60,.4); font-size: calc(16px * var(--ui-scale)); }
-  #btnDrift { width: calc(62px * var(--ui-scale)); height: calc(62px * var(--ui-scale)); background: rgba(80,160,255,.4); font-size: calc(12px * var(--ui-scale)); }
-  /* 道具按钮：位于加速按钮上方（金色，对应"？"箱） */
+  .touch-btn:active { transform: scale(.85); } /* 按压缩放反馈 */
+  /* 右排三键：道具 70 / 漂移 75 / 加速 95（加速在最右，拇指易达） */
+  #btnGas   { width: calc(95px * var(--ui-scale)); height: calc(95px * var(--ui-scale)); background: rgba(255,80,60,.4); font-size: calc(16px * var(--ui-scale)); }
+  #btnDrift { width: calc(75px * var(--ui-scale)); height: calc(75px * var(--ui-scale)); background: rgba(80,160,255,.4); font-size: calc(13px * var(--ui-scale)); }
   #btnItem {
-    position: absolute; right: calc(30px * var(--ui-scale)); bottom: calc(126px * var(--ui-scale));
-    width: calc(72px * var(--ui-scale)); height: calc(72px * var(--ui-scale));
+    width: calc(70px * var(--ui-scale)); height: calc(70px * var(--ui-scale));
     background: rgba(255,200,60,.4);
-    font-size: calc(14px * var(--ui-scale));
-    transition: opacity .15s ease;
+    font-size: calc(26px * var(--ui-scale)); /* 📦 图标 */
   }
   /* 无道具时置灰（P0-2） */
   #btnItem.disabled { opacity: .28; filter: grayscale(1); }
@@ -282,10 +282,11 @@
     <!-- 跟随式摇杆：感应区（左 60% 隐形） + 底座（出现在触摸点） -->
     <div id="joystickZone"></div>
     <div id="joystickBase"><div id="joystickKnob"></div></div>
-    <div id="btnItem" class="touch-btn">📦</div>
+    <!-- 右下操作排（从左到右：道具 70 / 漂移 75 / 加速 95，加速最靠拇指） -->
     <div id="touchButtons">
-      <div id="btnGas" class="touch-btn">加速</div>
+      <div id="btnItem" class="touch-btn">📦</div>
       <div id="btnDrift" class="touch-btn">漂移</div>
+      <div id="btnGas" class="touch-btn">加速</div>
     </div>
   </div>
 
