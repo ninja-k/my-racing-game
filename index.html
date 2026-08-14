@@ -142,8 +142,15 @@
     display: flex; align-items: center; justify-content: center;
     font-size: calc(34px * var(--ui-scale));
   }
-  /* 移动端：道具槽上移，避免与道具/加速按钮重叠 */
-  body.mobile #powerupSlot { bottom: calc(214px * var(--ui-scale)); }
+  /* ============ 移动端 HUD 重排（P0-4） ============ */
+  body.mobile #rankText { top: calc(8px * var(--ui-scale)); font-size: calc(34px * var(--ui-scale)); }
+  body.mobile .hud-top { top: calc(56px * var(--ui-scale)); justify-content: center; gap: calc(14px * var(--ui-scale)); }
+  body.mobile .hud-lap, body.mobile .hud-timer { font-size: calc(24px * var(--ui-scale)); }
+  /* 道具槽：右上角（小地图下方） */
+  body.mobile #powerupSlot { right: calc(14px * var(--ui-scale)); top: calc(106px * var(--ui-scale)); bottom: auto; }
+  /* 对手/分段计时：左上角（不挡视野） */
+  body.mobile #opponents { top: calc(96px * var(--ui-scale)); left: calc(10px * var(--ui-scale)); transform: none; }
+  body.mobile #splitText { top: calc(156px * var(--ui-scale)); left: calc(10px * var(--ui-scale)); bottom: auto; transform: none; }
 
   #opponents {
     position: absolute; top: 50%; left: calc(8px * var(--ui-scale)); transform: translateY(-50%);
@@ -1942,13 +1949,13 @@ class Game {
 
   /**
    * 指针式模拟速度表（0~300 km/h）
-   * PC：左下角；移动端：移至左上角（缩小），为左下摇杆让位
+   * PC：左下角；移动端：左下拇指区上方（缩小，避免遮挡操作）
    */
   _drawSpeedometer(ctx) {
     const isMobile = document.body.classList.contains('mobile');
-    const cx = isMobile ? 88 : 92;
-    const cy = isMobile ? 118 : 548;
-    const R = isMobile ? 56 : 66;
+    const cx = isMobile ? 80 : 92;
+    const cy = isMobile ? 462 : 548;
+    const R = isMobile ? 42 : 66;
     ctx.save();
     // 表盘（上半圆）
     ctx.fillStyle = 'rgba(10,15,25,0.78)';
@@ -1992,19 +1999,23 @@ class Game {
     ctx.beginPath();
     ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
     ctx.fill();
-    // 数字速度
+    // 数字速度（移动端缩小字号）
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px sans-serif';
-    ctx.fillText(String(Math.round(this.player.speed)), cx, cy + 22);
-    ctx.font = '9px sans-serif';
+    ctx.font = isMobile ? 'bold 16px sans-serif' : 'bold 22px sans-serif';
+    ctx.fillText(String(Math.round(this.player.speed)), cx, cy + (isMobile ? 14 : 22));
+    ctx.font = isMobile ? '8px sans-serif' : '9px sans-serif';
     ctx.fillStyle = '#9ab';
-    ctx.fillText('km/h', cx, cy + 36);
+    ctx.fillText('km/h', cx, cy + (isMobile ? 28 : 36));
     ctx.restore();
   }
 
-  /** 小地图：150×150 赛道俯视图（右上角，避开顶部 HUD），玩家红点 / AI 彩点 */
+  /** 小地图：150×150 赛道俯视图（右上角，避开顶部 HUD），玩家红点 / AI 彩点；移动端缩小 */
   _drawMinimap(ctx) {
-    const W = 150, H = 150, X = CANVAS_W - W - 12, Y = 52;
+    const isMobile = document.body.classList.contains('mobile');
+    const W = isMobile ? 92 : 150;
+    const H = isMobile ? 92 : 150;
+    const X = CANVAS_W - W - (isMobile ? 10 : 12);
+    const Y = isMobile ? 8 : 52;
     ctx.save();
     // 背景
     ctx.fillStyle = 'rgba(10,15,25,0.65)';
