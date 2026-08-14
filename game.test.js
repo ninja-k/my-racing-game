@@ -11,7 +11,7 @@ const URL = 'file://' + path.resolve(__dirname, 'index.html');
 async function startRace(page) {
   await page.goto(URL);
   await page.waitForTimeout(300);
-  await page.click('#startBtn');
+  await page.click('#soloBtn');
 }
 
 /**
@@ -45,10 +45,11 @@ async function driveUntil(page, targetLap, maxSeconds = 200) {
 }
 
 /* ---------------- T01 页面加载 ---------------- */
-test('T01 页面加载：标题、开始按钮、Canvas 可见', async ({ page }) => {
+test('T01 页面加载：标题、联机/单人按钮、Canvas 可见', async ({ page }) => {
   await page.goto(URL);
   await expect(page).toHaveTitle(/马力欧赛车/);
-  await expect(page.locator('#startBtn')).toBeVisible();
+  await expect(page.locator('#startBtn')).toBeVisible(); // 联机对战
+  await expect(page.locator('#soloBtn')).toBeVisible();  // 单人游戏
   await expect(page.locator('#gameCanvas')).toBeVisible();
   await expect(page.locator('body')).toHaveAttribute('data-state', 'menu');
 });

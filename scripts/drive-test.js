@@ -7,7 +7,7 @@ const path = require('path');
   const page = await browser.newPage();
   await page.goto('file://' + path.resolve(__dirname, '..', 'index.html'));
   await page.waitForTimeout(300);
-  await page.click('#startBtn');
+  await page.click('#soloBtn');
 
   await page.evaluate(() => {
     const g = window.__GAME__;

@@ -20,10 +20,10 @@ const fs = require('fs');
   console.log('--- Step 1 回归 ---');
   const title = await page.title();
   if (title.includes('马力欧赛车')) ok('页面标题正确'); else fail('页面标题缺失');
-  if (await page.locator('#startBtn').isVisible()) ok('开始按钮可见'); else fail('开始按钮不可见');
+  if (await page.locator('#soloBtn').isVisible()) ok('开始按钮可见'); else fail('开始按钮不可见');
   if (await page.locator('#gameCanvas').isVisible()) ok('Canvas 可见'); else fail('Canvas 不可见');
 
-  await page.click('#startBtn');
+  await page.click('#soloBtn');
   await page.waitForTimeout(100);
   if ((await page.getAttribute('body', 'data-state')) === 'racing') ok('点击开始后状态 = racing'); else fail('状态应为 racing');
   if ((await page.textContent('#speedValue')).trim() === '0') ok('初始速度 = 0'); else fail('初始速度错误');

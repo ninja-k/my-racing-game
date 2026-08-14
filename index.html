@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>马力欧赛车风格网页小游戏</title>
+<!-- Playroom Kit（多人联机 SDK）：官方 CDN，全局对象 window.Playroom
+     说明：multiplayer.full.umd.js 为自包含构建（已内置 React），故无需再引入 react/react-dom peer dependencies -->
+<script src="https://unpkg.com/playroomkit/multiplayer.full.umd.js" crossorigin="anonymous"></script>
 <style>
   /* ================= 全局 ================= */
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -90,6 +93,9 @@
   }
   .controls-hint b { color: #ffd23f; }
 
+  .mp-status { font-size: 12px; color: #9fd8a0; min-height: 16px; }
+  .mp-status.err { color: #ffb4a8; }
+
   /* ================= HUD（比赛进行中，DOM 层） ================= */
   #hud {
     position: absolute; inset: 0;
@@ -153,14 +159,16 @@
 
 <div id="gameWrapper">
 
-  <!-- ========== 菜单界面（Step 1） ========== -->
+  <!-- ========== 菜单界面（Step 1 + Step 2 联机入口） ========== -->
   <div id="menuOverlay" class="overlay">
     <div class="game-title">马力欧赛车</div>
     <div class="game-subtitle">风格网页小游戏</div>
-    <button id="startBtn" class="btn">开 始 比 赛</button>
+    <button id="startBtn" class="btn">联 机 对 战</button>
+    <button id="soloBtn" class="btn secondary">单 人 游 戏</button>
+    <div id="mpStatus" class="mp-status"></div>
     <div class="controls-hint">
-      <b>↑</b> 加速 &nbsp; <b>←→</b> 转向 &nbsp; <b>Space</b> 漂移 &nbsp; <b>Z</b> 使用道具<br>
-      完成 <b>3 圈</b> 比赛，与 3 名 AI 一决高下！
+      <b>↑</b> 加速 &nbsp; <b>←→</b> 转向 &nbsp; <b>Space</b> 漂移 &nbsp; <b>Z</b> 道具<br>
+      联机对战：2-4 名玩家创建/加入房间竞速；单人游戏：与 3 名 AI 一决高下（3 圈）
     </div>
   </div>
 
@@ -998,7 +1006,7 @@ const HUD = {
   setPowerUp(icon) { this.el.powerup.textContent = icon || '—'; },
   setOpponents(list) {
     this.el.opponents.innerHTML = list
-      .map(o => '<div class="opp-tag">AI ' + o.index + ' ' + (o.delta >= 0 ? '+' : '') + o.delta.toFixed(1) + 's</div>')
+      .map(o => '<div class="opp-tag">' + (o.label || '') + ' ' + (o.delta >= 0 ? '+' : '') + o.delta.toFixed(1) + 's</div>')
       .join('');
   }
 };
@@ -1051,6 +1059,13 @@ class Game {
     this.prevOffTrack = false;  // 玩家上一帧是否出界
     // ---- HUD 升级（Step 8） ----
     this.splitTimer = 0;        // 分段计时显示剩余时间（秒）
+    // ---- 联机模式（Step 3+） ----
+    this.multiplayerMode = false; // 联机对战模式
+    this.remotePlayers = {};    // 远程玩家 { playerId: { player, color, name, car } }
+    this.myPlayerId = null;     // 本机 Playroom 玩家 id
+    this.playerName = '玩家';   // 本机玩家名
+    this.publishTick = 0;       // 状态发布节流计数（每 4 帧 = 15Hz）
+    this.globalRaceState = null;// 全局比赛状态（房主写入）
   }
 
   /** 初始化：绑定按钮、生成赛道 / AI / 道具箱、绑定键盘、启动主循环 */
@@ -1065,8 +1080,15 @@ class Game {
       new AI(320, 475, '#6fe36f', 2),
       new AI(365, 475, '#ffd23f', 3)
     ];
-    document.getElementById('startBtn').addEventListener('click', () => this.start());
+    // 菜单：联机对战（insertCoin 加入房间） / 单人游戏（直接开局）
+    document.getElementById('startBtn').addEventListener('click', () => this.startMultiplayer());
+    document.getElementById('soloBtn').addEventListener('click', () => this.start());
     document.getElementById('restartBtn').addEventListener('click', () => this.restart());
+    // 联机状态提示
+    const st = document.getElementById('mpStatus');
+    if (st) {
+      st.textContent = '联机服务：' + (this.multiplayerAvailable ? '已连接' : '不可用（可玩单人游戏）');
+    }
     // 键盘输入（支持方向键 + WASD + Z 道具）
     const setKey = (k, v) => {
       if (k === 'ArrowUp' || k === 'w' || k === 'W') this.keys.up = v;
@@ -1097,12 +1119,265 @@ class Game {
     AudioManager.setEngineSpeed(0);
   }
 
+  /**
+   * 联机对战入口（Step 2）：
+   * 点击"联机对战" → insertCoin() 展示 Playroom 默认大厅（创建/加入房间）→
+   * 加入成功后（insertCoin resolve）才进入游戏；失败则提示并留在菜单
+   */
+  async startMultiplayer(opts) {
+    if (typeof Multiplayer === 'undefined' || !Multiplayer.available) {
+      this._mpNotice('联机服务不可用（请联网后重试），已进入单人模式', true);
+      this.start();
+      return;
+    }
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true;
+    btn.textContent = '正在加入房间…';
+    try {
+      await Multiplayer.join(opts || {});
+      btn.disabled = false;
+      btn.textContent = '联 机 对 战';
+      this._mpNotice(Multiplayer.roomCode ? '已加入房间：' + Multiplayer.roomCode + '，准备比赛！' : '已加入房间，准备比赛！');
+      this.multiplayerMode = true;
+      this._setupMultiplayer();
+      this.start();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = '联 机 对 战';
+      this._mpNotice('加入房间失败：' + ((e && e.message) || e), true);
+    }
+  }
+
+  /**
+   * 联机模式初始化（Step 3 + Step 4）：
+   * 禁用 AI、登记本机玩家、监听玩家加入/退出、本机断开处理、房主分配发车位并写入全局比赛状态
+   */
+  _setupMultiplayer() {
+    this.ais = []; // 联机模式不使用 AI
+    this.remotePlayers = {};
+    const me = Multiplayer.myPlayer();
+    if (me) {
+      this.myPlayerId = me.id;
+      this.playerName = Multiplayer.getPlayerProfile(me).name || '玩家';
+      this.player.name = this.playerName;
+      // 本机颜色：按 id 从联机色板取色
+      this.player.color = this._mpColorFor(me.id);
+    }
+    // 监听玩家加入 → 创建远程赛车实体（含退出监听，见 _onRemoteJoin）
+    Multiplayer.onPlayerJoin(p => this._onRemoteJoin(p));
+    // 本机断开房间 → 返回菜单（Step 4，防重复注册）
+    if (!this._mpDisconnectWired) {
+      this._mpDisconnectWired = true;
+      Multiplayer.onDisconnect(() => {
+        Multiplayer.resetSession();
+        this._mpNotice('网络连接已断开，已返回菜单', true);
+        this._exitToMenu();
+      });
+    }
+    // 房主：分配自己的发车位 + 广播比赛开始
+    this._assignGridSlot();
+    if (Multiplayer.isHost()) {
+      Multiplayer.setGlobal('raceState', 'racing');
+      this.globalRaceState = 'racing';
+    } else {
+      this.globalRaceState = Multiplayer.getGlobal('raceState') || 'racing';
+    }
+  }
+
+  /** 退出到菜单（本机断线等场景）：隐藏比赛界面，重置联机模式 */
+  _exitToMenu() {
+    this.multiplayerMode = false;
+    this.remotePlayers = {};
+    this.setState(STATE.MENU);
+    HUD.showHud(false);
+    document.getElementById('finishedOverlay').classList.add('hidden');
+    document.getElementById('menuOverlay').classList.remove('hidden');
+  }
+
+  /**
+   * 远程玩家加入（Step 4）：
+   * 1) 登记赛车实体（颜色/名字）
+   * 2) 立即读取其当前同步状态（晚加入者能马上看到全场位置）
+   * 3) 注册 player.onQuit → 退出时移除实体（官方 API：PlayerState.onQuit）
+   * 4) 房主为其分配发车位
+   */
+  _onRemoteJoin(player) {
+    if (!this.multiplayerMode || player.id === this.myPlayerId) return;
+    if (this.remotePlayers[player.id]) return;
+    const rp = {
+      player,
+      color: this._mpColorFor(player.id),
+      name: Multiplayer.getPlayerProfile(player).name || '玩家',
+      car: { x: 0, y: 0, angle: 0, speed: 0, lap: 0, progress: 0 }
+    };
+    // 立即读取现有同步状态（晚加入者视角）
+    const s = Multiplayer.getCarState(player);
+    if (s) {
+      rp.car.x = s.x; rp.car.y = s.y; rp.car.angle = s.angle;
+      rp.car.speed = s.speed; rp.car.lap = s.lap; rp.car.progress = s.progress;
+      rp.car.item = s.item; rp.car.drifting = s.drifting;
+      if (s.color) rp.color = s.color;
+      if (s.name) rp.name = s.name;
+    }
+    this.remotePlayers[player.id] = rp;
+    // 该玩家退出时移除实体
+    Multiplayer.onPlayerQuit(player, () => this._onRemoteQuit(player.id));
+    this._assignGridSlot(); // 房主为新玩家分配发车位
+  }
+
+  /** 远程玩家退出：移除其赛车实体（排名/渲染自动跟随） */
+  _onRemoteQuit(playerId) {
+    if (!this.remotePlayers[playerId]) return;
+    delete this.remotePlayers[playerId];
+    if (window.console) console.log('[Multiplayer] 玩家退出，已移除赛车实体: ' + playerId);
+  }
+
+  /** 联机色板（按玩家 id 哈希取色，各端一致） */
+  _mpColorFor(id) {
+    const pool = ['#3aa0ff', '#6fe36f', '#ffd23f', '#e87bd8'];
+    let h = 0;
+    for (let i = 0; i < String(id).length; i++) h = (h * 31 + String(id).charCodeAt(i)) >>> 0;
+    return pool[h % pool.length];
+  }
+
+  /** 房主维护全局发车位映射 { playerId: 槽位 } */
+  _assignGridSlot() {
+    if (!Multiplayer.isHost()) return;
+    const grid = Multiplayer.getGlobal('grid') || {};
+    const targets = [this.myPlayerId, ...Object.keys(this.remotePlayers)].filter(Boolean);
+    let changed = false;
+    for (const id of targets) {
+      if (!(id in grid)) {
+        grid[id] = Object.keys(grid).length;
+        changed = true;
+      }
+    }
+    if (changed) Multiplayer.setGlobal('grid', grid);
+  }
+
+  /** 本机发车位坐标（底部直道 4 槽位；房主未分配时按 id 哈希兜底，避免挤占槽 0） */
+  _gridPosition() {
+    const grid = Multiplayer.getGlobal('grid') || {};
+    let slot = grid[this.myPlayerId];
+    if (slot === undefined) {
+      let h = 0;
+      const id = String(this.myPlayerId || '');
+      for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+      slot = h % 4;
+    }
+    const slots = [230, 275, 320, 365];
+    return { x: slots[slot % 4], y: 475 };
+  }
+
+  /** 发布本机车辆状态（约 15Hz，Step 3 数据结构 + Step 5 输入/道具事件） */
+  _publishLocalState() {
+    const p = this.player;
+    Multiplayer.publishCarState({
+      x: +p.x.toFixed(1),
+      y: +p.y.toFixed(1),
+      angle: +p.angle.toFixed(3),
+      speed: Math.round(p.speed),
+      lap: p.lap,
+      progress: Math.round(p.progress),
+      item: p.item || null,
+      drifting: p.isDrifting,
+      boosting: p.boost > 0 || p.mushroomTimer > 0,
+      color: p.color,
+      name: this.playerName,
+      // Step 5：同步玩家操作（键盘输入状态，接收端用于插值/预测）
+      input: {
+        up: this.keys.up, down: this.keys.down,
+        left: this.keys.left, right: this.keys.right,
+        drift: this.keys.drift
+      },
+      // Step 5：最近一次道具使用事件（seq 递增，接收端据此一致生成实体）
+      action: this._lastAction || null
+    });
+  }
+
+  /** 记录本机道具使用事件（用于广播给其他客户端） */
+  _publishItemAction(type) {
+    const p = this.player;
+    this._actionSeq = (this._actionSeq || 0) + 1;
+    this._lastAction = {
+      seq: this._actionSeq,
+      type: type,
+      x: +p.x.toFixed(1),
+      y: +p.y.toFixed(1),
+      angle: +p.angle.toFixed(3)
+    };
+  }
+
+  /**
+   * 拉取远程玩家最新同步状态（Step 3 数据 + Step 5 平滑插值 + 道具事件应用）
+   * @param {number} dt 帧步长（秒）
+   */
+  _syncRemoteStates(dt) {
+    for (const id in this.remotePlayers) {
+      const rp = this.remotePlayers[id];
+      const s = Multiplayer.getCarState(rp.player);
+      if (!s) continue;
+      // 精确同步值（供测试/排名/HUD 使用）
+      rp.target = { x: s.x, y: s.y, angle: s.angle, speed: s.speed, lap: s.lap, progress: s.progress, input: s.input || null };
+      // 渲染位置：指数平滑逼近目标（消除 15Hz 同步的步进感）
+      const k = Math.min(1, dt * 12);
+      rp.car.x += (s.x - rp.car.x) * k;
+      rp.car.y += (s.y - rp.car.y) * k;
+      rp.car.angle = s.angle;
+      rp.car.speed = s.speed;
+      rp.car.lap = s.lap;
+      rp.car.progress = s.progress;
+      rp.car.item = s.item;
+      rp.car.drifting = s.drifting;
+      if (s.color) rp.color = s.color;
+      if (s.name) rp.name = s.name;
+      // 道具事件同步：seq 变化 → 本端一致生成龟壳/香蕉（Step 5 一致性）
+      if (s.action && s.action.seq !== rp.lastActionSeq) {
+        rp.lastActionSeq = s.action.seq;
+        this._applyRemoteAction(rp, s.action);
+      }
+    }
+  }
+
+  /** 应用远程玩家的道具使用事件（所有客户端一致生成实体） */
+  _applyRemoteAction(rp, action) {
+    if (action.type === 'shell') {
+      this.shells.push({ x: action.x, y: action.y, angle: action.angle, owner: rp, life: 4 });
+    } else if (action.type === 'banana') {
+      this.bananas.push({ x: action.x, y: action.y, owner: rp });
+    }
+    // mushroom：加速特效经 boosting 状态呈现，无需实体
+  }
+
+  /** 远程车辆列表（伪 Vehicle 对象，供排名/碰撞/HUD 复用） */
+  _remoteCarList() {
+    const list = [];
+    for (const id in this.remotePlayers) {
+      const rp = this.remotePlayers[id];
+      list.push({ lap: rp.car.lap, progress: rp.car.progress, x: rp.car.x, y: rp.car.y, r: 8, rp });
+    }
+    return list;
+  }
+
+  /** 菜单联机状态提示 */
+  _mpNotice(msg, isErr) {
+    const el = document.getElementById('mpStatus');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'mp-status' + (isErr ? ' err' : '');
+  }
+
   /** 结束比赛：显示成绩并写入排行榜 */
   finish() {
     this.setState(STATE.FINISHED);
     HUD.showHud(false);
     AudioManager.stopEngine();
     AudioManager.blip(1320, 0.25, 'triangle');
+    // 联机：房主广播比赛结束（Step 3 全局状态同步）
+    if (this.multiplayerMode && Multiplayer.isHost()) {
+      Multiplayer.setGlobal('raceState', 'finished');
+    }
+    this.globalRaceState = Multiplayer.getGlobal('raceState') || this.globalRaceState;
     // 成绩展示（AI 加入后名次由排名逻辑计算）
     const rankTxt = this.rank + ordinal(this.rank);
     const lapInfo = this.lapTimes.length
@@ -1157,9 +1432,15 @@ class Game {
     this.prevOffTrack = false;
     this.splitTimer = 0;
     PowerUp.build(this.track);
-    // 玩家回到起点（起点线后方的直道上）
-    this.player.x = 230;
-    this.player.y = 475;
+    // 玩家回到起点（联机模式按房主分配的发车位）
+    if (this.multiplayerMode) {
+      const gp = this._gridPosition();
+      this.player.x = gp.x;
+      this.player.y = gp.y;
+    } else {
+      this.player.x = 230;
+      this.player.y = 475;
+    }
     this.player.angle = 0;
     this.player.speed = 0;
     this.player.isDrifting = false;
@@ -1222,13 +1503,20 @@ class Game {
     requestAnimationFrame(t => this.loop(t));
   }
 
-  /** 逻辑更新：玩家 + AI 驾驶、道具、碰撞、排名、反馈 */
+  /** 逻辑更新：玩家 + AI 驾驶、道具、碰撞、排名、反馈、联机同步 */
   update(dt) {
     if (this.state === STATE.RACING) {
       this.raceTimeMs += dt * 1000;
       HUD.setTimer(this.raceTimeMs);
       if (this.player.update(dt, Track, this.keys)) this._onLapComplete();
       for (const ai of this.ais) ai.update(dt, Track, this.ais);
+
+      // ---- 联机状态同步（Step 3+5）：发布本机 + 拉取远程（约 15Hz） ----
+      if (this.multiplayerMode) {
+        this.publishTick = (this.publishTick + 1) % 4;
+        if (this.publishTick === 0) this._publishLocalState();
+        this._syncRemoteStates(dt);
+      }
 
       // ---- 反馈系统 ----
       AudioManager.setEngineSpeed(this.player.speed); // 引擎音随速度
@@ -1247,10 +1535,13 @@ class Game {
       this.prevOffTrack = this.player.offTrack;
 
       // ---- 道具系统 ----
-      // 玩家使用道具（Z 键，边沿触发）
+      // 玩家使用道具（Z 键，边沿触发）；联机模式广播使用事件（Step 5 一致性）
       if (this.keys.item) {
         this.keys.item = false;
-        PowerUp.useItem(this.player, this);
+        const usedItem = this.player.item;
+        if (PowerUp.useItem(this.player, this) && this.multiplayerMode && usedItem) {
+          this._publishItemAction(usedItem);
+        }
       }
       // AI 使用道具：随机概率 40%×难度/秒，使用频率随难度提升
       for (const ai of this.ais) {
@@ -1292,9 +1583,9 @@ class Game {
     this.floats = this.floats.filter(f => f.life > 0);
   }
 
-  /** 龟壳：向前飞行，命中车辆使其打滑 1s；出界或超时消失 */
+  /** 龟壳：向前飞行，命中车辆使其打滑 1s；出界或超时消失（含远程车辆，效果只作用于本机） */
   _updateShells(dt) {
-    const cars = [this.player, ...this.ais];
+    const cars = [this.player, ...this.ais, ...this._remoteCarList()];
     const next = [];
     for (const s of this.shells) {
       s.life -= dt;
@@ -1305,11 +1596,14 @@ class Game {
       for (const c of cars) {
         if (c === s.owner) continue;
         if (Math.hypot(c.x - s.x, c.y - s.y) < 15) {
-          c.slipTimer = 1; // 打滑 1 秒
-          c.speed *= 0.5;
+          // 效果只作用于本机车辆（远程受击由其所属端处理，最终一致性）
+          if (c === this.player) {
+            c.slipTimer = 1; // 打滑 1 秒
+            c.speed *= 0.5;
+            AudioManager.playCrash();
+            this._shake(0.15);
+          }
           hit = true;
-          AudioManager.playCrash();
-          this._shake(0.15);
           break;
         }
       }
@@ -1320,19 +1614,21 @@ class Game {
     this.shells = next;
   }
 
-  /** 香蕉皮：静态，任何车辆踩中减速 60%（0.5s），随后消失 */
+  /** 香蕉皮：静态，任何车辆踩中减速 60%（0.5s），随后消失（含远程车辆） */
   _updateBananas(dt) {
-    const cars = [this.player, ...this.ais];
+    const cars = [this.player, ...this.ais, ...this._remoteCarList()];
     const next = [];
     for (const b of this.bananas) {
       let hit = false;
       for (const c of cars) {
         if (Math.hypot(c.x - b.x, c.y - b.y) < 15) {
-          c.speed *= 0.4;   // 减速 60%
-          c.slowTimer = 0.5;
+          if (c === this.player) {
+            c.speed *= 0.4;   // 减速 60%
+            c.slowTimer = 0.5;
+            AudioManager.playCrash();
+            this._shake(0.15);
+          }
           hit = true;
-          AudioManager.playCrash();
-          this._shake(0.15);
           break;
         }
       }
@@ -1364,11 +1660,28 @@ class Game {
         }
       }
     }
+    // 联机：本机与远程车辆碰撞（基于同步位置，仅本端处理，最终一致性）
+    if (this.multiplayerMode) {
+      for (const id in this.remotePlayers) {
+        const c = this.remotePlayers[id].car;
+        if (c.x === 0 && c.y === 0) continue;
+        const dx = c.x - this.player.x, dy = c.y - this.player.y;
+        const d = Math.hypot(dx, dy);
+        if (d > 0.001 && d < this.player.r + 8) {
+          const nx = dx / d, ny = dy / d;
+          this.player.x -= nx * (16 - d);
+          this.player.y -= ny * (16 - d);
+          this.player.speed *= 0.85;
+          AudioManager.playCrash();
+          this._shake(0.15);
+        }
+      }
+    }
   }
 
-  /** 排名：按 (圈数, 未包装进度) 排序，玩家名次写 HUD；超车时弹 NICE! */
+  /** 排名：按 (圈数, 未包装进度) 排序（含远程玩家），玩家名次写 HUD；超车时弹 NICE! */
   _updateRank() {
-    const cars = [this.player, ...this.ais].sort((a, b) => {
+    const cars = [this.player, ...this.ais, ...this._remoteCarList()].sort((a, b) => {
       if (b.lap !== a.lap) return b.lap - a.lap;
       return b.progress - a.progress;
     });
@@ -1387,16 +1700,24 @@ class Game {
     HUD.setRank(this.rank);
   }
 
-  /** 对手相对位置：以弧长差 ÷ 当前速度估算真实时间差（秒） */
+  /** 对手相对位置：以弧长差 ÷ 当前速度估算真实时间差（秒）；联机模式显示远程玩家 */
   _updateOpponents() {
     const SAMPLE_PX = Track.totalLen / Track.pts.length; // 每采样约 8px
     const playerPos = (this.player.lap * Track.pts.length + this.player.progress) * SAMPLE_PX;
     const playerSpeed = Math.max(40, this.player.speed * 0.5); // px/s，防止除零
-    const list = this.ais.map(ai => {
-      const aiPos = (ai.lap * Track.pts.length + ai.progress) * SAMPLE_PX;
-      const delta = (aiPos - playerPos) / playerSpeed; // 正=领先
-      return { index: ai.index, delta };
-    });
+    let list;
+    if (this.multiplayerMode) {
+      list = this._remoteCarList().map(rc => ({
+        label: rc.rp.name,
+        delta: ((rc.lap * Track.pts.length + rc.progress) * SAMPLE_PX - playerPos) / playerSpeed
+      }));
+    } else {
+      list = this.ais.map(ai => {
+        const aiPos = (ai.lap * Track.pts.length + ai.progress) * SAMPLE_PX;
+        const delta = (aiPos - playerPos) / playerSpeed; // 正=领先
+        return { label: 'AI ' + ai.index, delta };
+      });
+    }
     HUD.setOpponents(list);
   }
 
@@ -1494,9 +1815,12 @@ class Game {
       ctx.ellipse(b.x, b.y, 6, 4, 0.6, 0, Math.PI * 2);
       ctx.fill();
     }
-    // 车辆（AI 在下层，玩家在最上层）
+    // 车辆（AI/远程玩家在下层，玩家在最上层）
     if (this.state === STATE.RACING || this.state === STATE.FINISHED) {
       for (const ai of this.ais) ai.draw(ctx);
+      if (this.multiplayerMode) {
+        for (const id in this.remotePlayers) this._drawRemoteCar(ctx, this.remotePlayers[id]);
+      }
       this.player.draw(ctx);
     }
     ctx.restore();
@@ -1649,13 +1973,63 @@ class Game {
     }
     ctx.globalAlpha = 1;
   }
+
+  /** 渲染远程玩家赛车（Step 3：基于同步状态绘制 + 名字标签） */
+  _drawRemoteCar(ctx, rp) {
+    const c = rp.car;
+    if (c.x === 0 && c.y === 0) return; // 尚未收到同步数据
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(c.angle);
+    ctx.fillStyle = rp.color;
+    ctx.fillRect(-10, -6, 20, 12);
+    ctx.fillStyle = 'rgba(255,255,255,.7)';
+    ctx.fillRect(3, -4, 5, 8); // 风挡
+    // 漂移胎痕（简单显示）
+    if (c.drifting) {
+      ctx.fillStyle = 'rgba(30,30,30,.4)';
+      ctx.beginPath();
+      ctx.arc(-8, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    // 名字标签
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = 'rgba(0,0,0,.6)';
+    ctx.fillText(rp.name, c.x + 1, c.y - 13);
+    ctx.fillStyle = rp.color;
+    ctx.fillText(rp.name, c.x, c.y - 14);
+  }
 }
 
 /* ================= 启动 ================= */
 window.addEventListener('DOMContentLoaded', () => {
   const game = new Game();
   game.init();
+  // 联机模块自检（Step 1）：记录 Playroom Kit 可用性，供 UI 与测试读取
+  if (typeof Multiplayer !== 'undefined') {
+    game.multiplayerAvailable = Multiplayer.checkAvailable();
+    game.multiplayerErr = Multiplayer._err;
+  } else {
+    game.multiplayerAvailable = false;
+    game.multiplayerErr = 'multiplayer.js 未加载';
+  }
+  // 联机直连参数（邀请链接 / 自动化测试，Step 6）：
+  //   ?mp=host           → 直连创建房间（skipLobby，官方 InitOptions）
+  //   ?mp=join&room=CODE → 直连加入指定房间（skipLobby + roomCode）
+  const q = new URLSearchParams(window.location.search);
+  const mpMode = q.get('mp');
+  if (mpMode === 'host' || mpMode === 'join') {
+    const opts = mpMode === 'host'
+      ? { skipLobby: true }
+      : { skipLobby: true, roomCode: q.get('room') || undefined };
+    game.startMultiplayer(opts);
+  }
 });
 </script>
+<!-- 多人联机模块（Playroom Kit 封装，Step 1 起逐步实现） -->
+<script src="multiplayer.js"></script>
 </body>
 </html>

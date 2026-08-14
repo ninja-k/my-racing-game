@@ -11,7 +11,7 @@ const path = require('path');
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(url);
   await page.waitForTimeout(300);
-  await page.click('#startBtn');
+  await page.click('#soloBtn');
 
   const fail = (msg) => { console.error('  ✗ ' + msg); process.exitCode = 1; };
   const ok = (msg) => console.log('  ✓ ' + msg);

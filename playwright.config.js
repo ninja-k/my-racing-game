@@ -3,7 +3,7 @@ const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: '.',
-  testMatch: 'game.test.js',
+  testMatch: /game.*\.test\.js/, // 单机 T01-T11 + 联机 M1-M7
   timeout: 120000,
   workers: 1, // 串行执行，避免资源竞争
   reporter: [['list']],

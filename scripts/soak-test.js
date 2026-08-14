@@ -13,7 +13,7 @@ const path = require('path');
 
   await page.goto('file://' + path.resolve(__dirname, '..', 'index.html'));
   await page.waitForTimeout(300);
-  await page.click('#startBtn');
+  await page.click('#soloBtn');
 
   // 自动导航 + 帧计数
   await page.evaluate(() => {
