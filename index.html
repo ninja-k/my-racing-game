@@ -158,6 +158,14 @@
   body.mobile #opponents { top: calc(96px * var(--ui-scale)); left: calc(10px * var(--ui-scale)); transform: none; }
   body.mobile #splitText { top: calc(156px * var(--ui-scale)); left: calc(10px * var(--ui-scale)); bottom: auto; transform: none; }
 
+  /* ============ 移动端菜单/结束界面适配（P2-10） ============ */
+  body.mobile .game-title { font-size: calc(58px * var(--ui-scale)); }
+  body.mobile .btn { font-size: calc(22px * var(--ui-scale)); padding: calc(14px * var(--ui-scale)) calc(42px * var(--ui-scale)); }
+  body.mobile .controls-hint { font-size: calc(13px * var(--ui-scale)); padding: calc(8px * var(--ui-scale)) calc(14px * var(--ui-scale)); }
+  body.mobile #finishedTitle { font-size: calc(40px * var(--ui-scale)); }
+  body.mobile #resultText { font-size: calc(18px * var(--ui-scale)); }
+  body.mobile #leaderboardBox { font-size: calc(14px * var(--ui-scale)); }
+
   #opponents {
     position: absolute; top: 50%; left: calc(8px * var(--ui-scale)); transform: translateY(-50%);
     display: flex; flex-direction: column; gap: calc(6px * var(--ui-scale));
@@ -204,6 +212,11 @@
     box-sizing: border-box;
     transform: translate(-50%, -50%);
     transition: transform .08s ease-out; /* 松手平滑回中 */
+  }
+  /* 滑动转向区（右 40%，P2-9）：隐形，按钮在其后定义故在上层 */
+  #swipeZone {
+    position: absolute; right: 0; top: 0; bottom: 0; width: 40%;
+    pointer-events: auto; touch-action: none;
   }
   #touchButtons {
     position: absolute; right: calc(16px * var(--ui-scale)); bottom: calc(16px * var(--ui-scale));
@@ -310,6 +323,8 @@
     <!-- 跟随式摇杆：感应区（左 60% 隐形） + 底座（出现在触摸点） -->
     <div id="joystickZone"></div>
     <div id="joystickBase"><div id="joystickKnob"></div></div>
+    <!-- 滑动转向区（右 40%，P2-9；按钮在其后定义故在上层） -->
+    <div id="swipeZone"></div>
     <!-- 右下操作排（从左到右：道具 70 / 漂移 75 / 加速 95，加速最靠拇指） -->
     <div id="touchButtons">
       <div id="btnItem" class="touch-btn">📦</div>

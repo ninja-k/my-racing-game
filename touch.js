@@ -46,6 +46,7 @@ const TouchControls = {
     this._bindButton(this.el.gas, 'up');
     this._bindButton(this.el.drift, 'drift');
     this._bindButton(this.el.item, 'item'); // 道具：等效 PC 的 Z 键
+    this._bindSwipe(); // P2-9：摇杆外滑动转向 / 上滑用道具
 
     // 4) 竖屏提示
     this._updateOrientation();
@@ -117,6 +118,49 @@ const TouchControls = {
       this.game.keys.right = s > 0;
       this.game.keys.steer = s; // 比例转向值（P1-8 灵敏度用）
     };
+  },
+
+  /* ---------- 滑动转向（P2-9：摇杆外左右滑动控制方向，上滑用道具） ---------- */
+  _bindSwipe() {
+    const zone = document.getElementById('swipeZone');
+    if (!zone) return;
+    const DEAD = 0.18;
+    let pid = null, sx = 0, sy = 0;
+
+    const onDown = (e) => {
+      if (pid !== null) return;
+      pid = e.pointerId;
+      try { zone.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件忽略 */ }
+      sx = e.clientX; sy = e.clientY;
+    };
+    const onMove = (e) => {
+      if (e.pointerId !== pid) return;
+      e.preventDefault();
+      let dx = (e.clientX - sx) / 60; // 滑动灵敏度与摇杆一致
+      if (dx > 1) dx = 1; else if (dx < -1) dx = -1;
+      const s = Math.abs(dx) < DEAD ? 0 : dx;
+      this.game.keys.steer = s;
+      this.game.keys.left = s < 0;
+      this.game.keys.right = s > 0;
+    };
+    const onUp = (e) => {
+      if (e.pointerId !== pid) return;
+      const dy = sy - e.clientY;
+      const dxAbs = Math.abs(e.clientX - sx);
+      if (dy > 40 && dxAbs < 40) {
+        this.game.keys.item = true; // 上滑使用道具
+        this.vibrate(10);
+      }
+      pid = null;
+      this.game.keys.steer = 0;
+      this.game.keys.left = false;
+      this.game.keys.right = false;
+    };
+
+    zone.addEventListener('pointerdown', onDown);
+    zone.addEventListener('pointermove', onMove);
+    zone.addEventListener('pointerup', onUp);
+    zone.addEventListener('pointercancel', onUp);
   },
 
   /* ---------- 右下按钮（加速 / 漂移，多指同时按下） ---------- */
