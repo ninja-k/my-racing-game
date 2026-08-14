@@ -25,6 +25,7 @@ const TouchControls = {
     // 1) 设备检测（navigator.userAgent）
     this.isMobile = /Android|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i.test(navigator.userAgent);
     if (this.isMobile) document.body.classList.add('mobile');
+    if (game) game.mobileFpsCap = this.isMobile; // P1-7：移动端 30fps 封顶
 
     this.el = {
       zone: document.getElementById('joystickZone'),

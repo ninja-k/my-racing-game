@@ -791,8 +791,10 @@ class Vehicle {
     this.x += Math.cos(this.angle) * v * dt;
     this.y += Math.sin(this.angle) * v * dt;
 
-    // 漂移胎痕：记录与衰减
-    if (this.isDrifting && this.speed > 10) {
+    // 漂移胎痕：记录与衰减（移动端减半密度，P1-7 性能降级）
+    this._trailTick = (this._trailTick || 0) + 1;
+    const trailEvery = document.body.classList.contains('mobile') ? 2 : 1;
+    if (this.isDrifting && this.speed > 10 && this._trailTick % trailEvery === 0) {
       this.trail.push({ x: this.x, y: this.y, life: 0.6 });
       if (this.trail.length > 60) this.trail.shift();
     }
@@ -1617,6 +1619,12 @@ class Game {
 
   /* ---------- 主循环 ---------- */
   loop(now) {
+    // 移动端性能降级（P1-7）：帧率封顶 30fps（节流，逻辑用真实 dt 不受影响）
+    if (this.mobileFpsCap && now - this._lastFrameAt < 33.3) {
+      requestAnimationFrame(t => this.loop(t));
+      return;
+    }
+    this._lastFrameAt = now;
     const dt = Math.min((now - this.lastTime) / 1000, 0.05); // 限制最大步长，防止切页跳变
     this.lastTime = now;
     this.update(dt);
@@ -2073,7 +2081,9 @@ class Game {
   /** 速度线：边缘放射状白线，密度随速度线性增加 */
   _drawSpeedLines(ctx) {
     const intensity = Math.min(1, (this.player.speed - 240) / 60); // 0..1
-    const count = Math.floor(18 + intensity * 30);
+    // 移动端性能降级（P1-7）：速度线密度 -70%
+    const density = document.body.classList.contains('mobile') ? 0.3 : 1;
+    const count = Math.floor((18 + intensity * 30) * density);
     this.lastSpeedLineCount = count;
     const t = performance.now() / 1000;
     ctx.strokeStyle = 'rgba(255,255,255,' + (0.12 + 0.22 * intensity).toFixed(3) + ')';
