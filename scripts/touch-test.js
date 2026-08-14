@@ -59,6 +59,7 @@ const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleW
       driftVisible: getComputedStyle(document.getElementById('btnDrift')).display !== 'none',
       zoneVisible: getComputedStyle(document.getElementById('joystickZone')).display !== 'none',
       scale: getComputedStyle(document.documentElement).getPropertyValue('--ui-scale').trim(),
+      wrapperW: Math.round(document.getElementById('gameWrapper').clientWidth),
       rotateHidden: document.getElementById('rotateOverlay').classList.contains('hidden')
     }));
     if (base.mobileClass) ok('移动 UA → body.mobile 已启用'); else fail('移动检测失败');
@@ -67,9 +68,10 @@ const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleW
     else fail('触屏控件未显示: ' + JSON.stringify(base));
     if (base.rotateHidden) ok('横屏（812×375）→ 无竖屏提示'); else fail('横屏误显示竖屏提示');
     const scaleVal = parseFloat(base.scale);
-    if (scaleVal > 0.5 && scaleVal < 1 && Math.abs(scaleVal - 779.52 / 960) < 0.05)
-      ok('UI 按屏宽缩放（--ui-scale=' + scaleVal + '，容器 779px/960）');
-    else fail('UI 缩放异常: ' + base.scale);
+    const expectedScale = base.wrapperW / 960;
+    if (scaleVal > 0.3 && scaleVal < 1 && Math.abs(scaleVal - expectedScale) < 0.05)
+      ok('UI 按屏宽缩放（--ui-scale=' + scaleVal + '，容器 ' + base.wrapperW + 'px/960）');
+    else fail('UI 缩放异常: ' + base.scale + ' (期望 ~' + expectedScale.toFixed(3) + ')');
 
     await page.click('#soloBtn');
     await page.waitForTimeout(200);

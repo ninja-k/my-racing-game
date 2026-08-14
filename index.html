@@ -25,9 +25,11 @@
   }
 
   /* ================= 游戏容器 ================= */
+  /* 宽度取三者最小：96vw、960px（桌面）、92vh*1.6（高度受限的屏幕，如手机横屏）——
+     保证 16:9 画面完整显示在视口内，多余部分由深色 body 形成黑边（类似 object-fit: contain） */
   #gameWrapper {
     position: relative;
-    width: min(96vw, 960px);
+    width: min(96vw, 960px, calc(92vh * 1.6));
     aspect-ratio: 960 / 600;
     border-radius: 12px;
     overflow: hidden;
