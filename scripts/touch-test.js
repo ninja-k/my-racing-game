@@ -102,6 +102,27 @@ const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleW
     });
     if (drift.d && !drift.dAfter) ok('漂移按钮：按下 keys.drift=true，松开恢复 false'); else fail('漂移按钮异常');
 
+    // 道具按钮
+    const itemBtn = await page.evaluate(() => {
+      const g = window.__GAME__;
+      g.ais = []; // 禁用 AI，避免踩掉测试用的香蕉
+      const p = g.player;
+      const btn = document.getElementById('btnItem');
+      const visible = getComputedStyle(btn).display !== 'none';
+      p.x = 300; p.y = 478; p.speed = 0; p.angle = 0;
+      p.item = 'banana';
+      g.bananas.length = 0;
+      btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4, clientX: 0, clientY: 0 }));
+      const key = g.keys.item;
+      g.testStep(1 / 60, 1); // 游戏消费 item 键 → 使用道具
+      btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
+      return { visible, key, itemAfter: p.item, bananaHere: g.bananas.length };
+    });
+    if (itemBtn.visible) ok('道具按钮可见'); else fail('道具按钮不可见');
+    if (itemBtn.key && itemBtn.itemAfter === null && itemBtn.bananaHere === 1)
+      ok('道具按钮：按下 → keys.item → 使用香蕉（槽位清空、香蕉生成）');
+    else fail('道具按钮异常: ' + JSON.stringify(itemBtn));
+
     // 摇杆转向
     const joy = await page.evaluate(() => {
       const g = window.__GAME__;
@@ -127,6 +148,7 @@ const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleW
     const shakeVib = await page.evaluate(() => {
       const g = window.__GAME__;
       window.__vibrations.length = 0;
+      g.shakeT = 0; // 清零（避免真实 rAF 帧的碰撞残留）
       g._shake(0.15);
       return window.__vibrations.slice(0, 2);
     });

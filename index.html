@@ -142,8 +142,8 @@
     display: flex; align-items: center; justify-content: center;
     font-size: calc(34px * var(--ui-scale));
   }
-  /* 移动端：道具槽上移，避免与加速/漂移按钮重叠 */
-  body.mobile #powerupSlot { bottom: calc(128px * var(--ui-scale)); }
+  /* 移动端：道具槽上移，避免与道具/加速按钮重叠 */
+  body.mobile #powerupSlot { bottom: calc(214px * var(--ui-scale)); }
 
   #opponents {
     position: absolute; top: 50%; left: calc(8px * var(--ui-scale)); transform: translateY(-50%);
@@ -164,26 +164,33 @@
   body.mobile #touchControls { display: block; }
   body.mobile { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 
+  /* 跟随式摇杆：感应区为左 60% 隐形区域，底座出现在触摸点 */
   #joystickZone {
-    position: absolute; left: calc(14px * var(--ui-scale)); bottom: calc(14px * var(--ui-scale));
-    width: calc(150px * var(--ui-scale)); height: calc(150px * var(--ui-scale));
+    position: absolute; left: 0; top: 0; bottom: 0; width: 60%;
     pointer-events: auto; touch-action: none;
   }
   #joystickBase {
-    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-    width: calc(132px * var(--ui-scale)); height: calc(132px * var(--ui-scale));
+    position: absolute; z-index: 2;
+    width: calc(120px * var(--ui-scale)); height: calc(120px * var(--ui-scale));
     border-radius: 50%;
     background: rgba(255,255,255,.14);
     border: 2px solid rgba(255,255,255,.35);
     box-sizing: border-box;
+    opacity: 0;
+    transform: translate(-50%, -50%);
+    transition: opacity .12s ease;
+    pointer-events: none;
   }
+  #joystickBase.active { opacity: 1; }
   #joystickKnob {
-    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-    width: calc(56px * var(--ui-scale)); height: calc(56px * var(--ui-scale));
+    position: absolute; left: 50%; top: 50%;
+    width: calc(48px * var(--ui-scale)); height: calc(48px * var(--ui-scale));
     border-radius: 50%;
     background: rgba(255,255,255,.5);
     border: 2px solid rgba(255,255,255,.6);
     box-sizing: border-box;
+    transform: translate(-50%, -50%);
+    transition: transform .08s ease-out; /* 松手平滑回中 */
   }
   #touchButtons {
     position: absolute; right: calc(14px * var(--ui-scale)); bottom: calc(14px * var(--ui-scale));
@@ -199,6 +206,13 @@
   }
   #btnGas   { width: calc(96px * var(--ui-scale)); height: calc(96px * var(--ui-scale)); background: rgba(255,80,60,.4); font-size: calc(16px * var(--ui-scale)); }
   #btnDrift { width: calc(62px * var(--ui-scale)); height: calc(62px * var(--ui-scale)); background: rgba(80,160,255,.4); font-size: calc(12px * var(--ui-scale)); }
+  /* 道具按钮：位于加速按钮上方（金色，对应"？"箱） */
+  #btnItem {
+    position: absolute; right: calc(30px * var(--ui-scale)); bottom: calc(126px * var(--ui-scale));
+    width: calc(72px * var(--ui-scale)); height: calc(72px * var(--ui-scale));
+    background: rgba(255,200,60,.4);
+    font-size: calc(14px * var(--ui-scale));
+  }
 
   /* ================= 竖屏提示（移动端） ================= */
   #rotateOverlay {
@@ -262,9 +276,10 @@
 
   <!-- ========== 触屏控制（移动端，Step 9） ========== -->
   <div id="touchControls">
-    <div id="joystickZone">
-      <div id="joystickBase"><div id="joystickKnob"></div></div>
-    </div>
+    <!-- 跟随式摇杆：感应区（左 60% 隐形） + 底座（出现在触摸点） -->
+    <div id="joystickZone"></div>
+    <div id="joystickBase"><div id="joystickKnob"></div></div>
+    <div id="btnItem" class="touch-btn">📦</div>
     <div id="touchButtons">
       <div id="btnGas" class="touch-btn">加速</div>
       <div id="btnDrift" class="touch-btn">漂移</div>
@@ -1113,7 +1128,7 @@ class Game {
     this.lastTime = 0;          // 上一帧时间戳（ms）
     this.raceTimeMs = 0;        // 本场比赛已用时间
     this.player = new Player();
-    this.keys = { up: false, down: false, left: false, right: false, drift: false, item: false };
+    this.keys = { up: false, down: false, left: false, right: false, drift: false, item: false, steer: 0 };
     // ---- 比赛状态 ----
     this.lap = 0;               // 当前圈数（0/3）
     this.lapTimes = [];         // 每圈用时（ms）

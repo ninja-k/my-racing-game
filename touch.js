@@ -28,9 +28,11 @@ const TouchControls = {
 
     this.el = {
       zone: document.getElementById('joystickZone'),
+      base: document.getElementById('joystickBase'),
       knob: document.getElementById('joystickKnob'),
       gas: document.getElementById('btnGas'),
       drift: document.getElementById('btnDrift'),
+      item: document.getElementById('btnItem'),
       rotate: document.getElementById('rotateOverlay')
     };
 
@@ -38,10 +40,11 @@ const TouchControls = {
 
     if (!this.isMobile) return; // PC：不绑定触屏，保持键盘控制
 
-    // 2) 摇杆 + 按钮
+    // 2) 摇杆 + 按钮（加速 / 漂移 / 道具）
     this._bindJoystick();
     this._bindButton(this.el.gas, 'up');
     this._bindButton(this.el.drift, 'drift');
+    this._bindButton(this.el.item, 'item'); // 道具：等效 PC 的 Z 键
 
     // 4) 竖屏提示
     this._updateOrientation();
@@ -50,18 +53,27 @@ const TouchControls = {
     window.addEventListener('resize', () => this.updateScale());
   },
 
-  /* ---------- 左下摇杆（转向） ---------- */
+  /* ---------- 跟随式摇杆（转向，P0-1） ---------- */
   _bindJoystick() {
     const zone = this.el.zone;
+    const base = this.el.base;
     const knob = this.el.knob;
-    const base = document.getElementById('joystickBase');
+    const wrapper = () => document.getElementById('gameWrapper').getBoundingClientRect();
+    const DEAD = 0.18; // 死区
 
     const onDown = (e) => {
       if (this._joyPointerId !== null) return; // 只跟踪一个触点
       e.preventDefault();
       this._joyPointerId = e.pointerId;
       try { zone.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件忽略 */ }
-      this._joyR = base.getBoundingClientRect().width / 2 || 66;
+      // 底座出现在触摸点（半径 = 底座半径 = 60px）
+      this._joyR = base.offsetWidth / 2 || 60;
+      const wr = wrapper();
+      base.style.left = (e.clientX - wr.left) + 'px';
+      base.style.top = (e.clientY - wr.top) + 'px';
+      base.classList.add('active');
+      this._joyBaseX = e.clientX;
+      this._joyBaseY = e.clientY;
       this._joyMove(e.clientX, e.clientY);
     };
     const onMove = (e) => {
@@ -74,7 +86,9 @@ const TouchControls = {
       this._joyPointerId = null;
       this.game.keys.left = false;
       this.game.keys.right = false;
-      knob.style.transform = 'translate(-50%, -50%)';
+      this.game.keys.steer = 0;
+      knob.style.transform = 'translate(-50%, -50%)'; // 平滑回中（CSS transition）
+      base.classList.remove('active');                // 底座淡出
     };
 
     zone.addEventListener('pointerdown', onDown);
@@ -83,18 +97,17 @@ const TouchControls = {
     zone.addEventListener('pointercancel', onUp);
 
     this._joyMove = (clientX, clientY) => {
-      const rect = zone.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      let dx = (clientX - cx) / this._joyR;
-      let dy = (clientY - cy) / this._joyR;
+      let dx = (clientX - this._joyBaseX) / this._joyR;
+      let dy = (clientY - this._joyBaseY) / this._joyR;
       const len = Math.hypot(dx, dy);
       if (len > 1) { dx /= len; dy /= len; } // 限制在圆内
       knob.style.transform =
         'translate(calc(-50% + ' + (dx * this._joyR) + 'px), calc(-50% + ' + (dy * this._joyR) + 'px))';
-      const dead = 0.18; // 死区
-      this.game.keys.left = dx < -dead;
-      this.game.keys.right = dx > dead;
+      // 死区 0.18：内为 0，外按比例
+      const s = Math.abs(dx) < DEAD ? 0 : dx;
+      this.game.keys.left = s < 0;
+      this.game.keys.right = s > 0;
+      this.game.keys.steer = s; // 比例转向值（P1-8 灵敏度用）
     };
   },
 
