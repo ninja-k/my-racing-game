@@ -1,10 +1,11 @@
 {
   "name": "mario2",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "马力欧赛车风格网页小游戏（单机 + Playroom 多人联机）",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "playwright test",
+    "vercel-build": "echo '纯静态站点，无需构建'"
   },
   "keywords": [],
   "author": "",
