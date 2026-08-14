@@ -44,6 +44,8 @@ const path = require('path');
     P.waitForState = () => Promise.resolve();
   });
   await page.click('#startBtn');
+  await page.waitForSelector('#trackSelectOverlay:not(.hidden)', { timeout: 5000 });
+  await page.click('.track-card'); // 房主选择赛道 → 开赛
   await page.waitForFunction(() => document.body.getAttribute('data-state') === 'racing', null, { timeout: 5000 });
 
   const setup = await page.evaluate(() => {

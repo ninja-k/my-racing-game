@@ -24,6 +24,7 @@ const fs = require('fs');
   if (await page.locator('#gameCanvas').isVisible()) ok('Canvas 可见'); else fail('Canvas 不可见');
 
   await page.click('#soloBtn');
+    await page.click('.track-card'); // 进入赛道选择 → 默认第一条赛道
   await page.waitForTimeout(100);
   if ((await page.getAttribute('body', 'data-state')) === 'racing') ok('点击开始后状态 = racing'); else fail('状态应为 racing');
   if ((await page.textContent('#speedValue')).trim() === '0') ok('初始速度 = 0'); else fail('初始速度错误');

@@ -25,13 +25,27 @@ const path = require('path');
   {
     const page = await newPage();
     await page.evaluate(() => {
+      const state = {};
+      const makePlayer = (id, name) => {
+        const st = { car: null };
+        return { id, getState: k => st[k], setState: (k, v) => { st[k] = v; }, getProfile: () => ({ name }), __st: st };
+      };
+      window.__me = makePlayer('host1', '房主');
       window.__coinCalls = [];
       window.__resolveCoin = null;
+      window.__setCalls = [];
       window.Playroom.insertCoin = (opts) => {
         window.__coinCalls.push(opts);
         return new Promise(res => { window.__resolveCoin = res; }); // 可控延迟
       };
       window.Playroom.getRoomCode = () => 'TEST12';
+      window.Playroom.isHost = () => true; // 本机=房主（赛道选择需 isHost 判定）
+      window.Playroom.setState = (k, v) => { state[k] = v; window.__setCalls.push([k, v]); };
+      window.Playroom.getState = k => state[k];
+      window.Playroom.myPlayer = () => window.__me;
+      window.Playroom.onPlayerJoin = () => () => {};
+      window.Playroom.onDisconnect = () => () => {};
+      window.Playroom.waitForState = () => Promise.resolve();
     });
     await page.click('#startBtn'); // 联机对战
     await page.waitForTimeout(300);
@@ -47,6 +61,8 @@ const path = require('path');
     else fail('按钮状态异常: ' + JSON.stringify({ t: mid.btnText, d: mid.disabled }));
     // 让 insertCoin resolve → 应进入游戏
     await page.evaluate(() => window.__resolveCoin());
+    await page.waitForSelector('#trackSelectOverlay:not(.hidden)', { timeout: 5000 });
+    await page.click('.track-card'); // 房主选择赛道 → 开赛
     await page.waitForFunction(() => document.body.getAttribute('data-state') === 'racing', null, { timeout: 5000 });
     const st = await page.getAttribute('body', 'data-state');
     if (st === 'racing') ok('insertCoin resolve 后进入游戏（state=racing）');
@@ -95,6 +111,12 @@ const path = require('path');
       await page.waitForTimeout(500);
       const state = await page.getAttribute('body', 'data-state');
       if (state === 'racing') { launched = true; break; }
+      // Launch 后进入赛道选择 → 点击卡片开赛
+      const overlayVisible = await page.locator('#trackSelectOverlay:not(.hidden)').isVisible().catch(() => false);
+      if (overlayVisible) {
+        await page.click('.track-card');
+        continue;
+      }
       // 探测大厅 UI：查找含 Playroom/Launch/Create/Join 文本的元素
       const found = await page.evaluate(() => {
         const all = [...document.querySelectorAll('button, div, span, input, a')];

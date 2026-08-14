@@ -115,6 +115,14 @@
   }
   #hud.visible { display: block; }
 
+  #exitBtn {
+    position: absolute; top: calc(6px * var(--ui-scale)); left: calc(6px * var(--ui-scale));
+    width: calc(30px * var(--ui-scale)); height: calc(30px * var(--ui-scale));
+    border-radius: 50%; border: 1px solid rgba(255,255,255,.4);
+    background: rgba(0,0,0,.45); color: #fff; font-size: calc(14px * var(--ui-scale));
+    cursor: pointer; z-index: 12;
+  }
+
   .hud-top { position: absolute; top: calc(10px * var(--ui-scale)); left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 0 calc(14px * var(--ui-scale)); }
   .hud-lap { font-size: calc(18px * var(--ui-scale)); color: #ffd23f; background: rgba(0,0,0,.45); padding: calc(4px * var(--ui-scale)) calc(12px * var(--ui-scale)); border-radius: calc(8px * var(--ui-scale)); }
   .hud-timer { font-size: calc(22px * var(--ui-scale)); color: #fff; background: rgba(0,0,0,.45); padding: calc(4px * var(--ui-scale)) calc(12px * var(--ui-scale)); border-radius: calc(8px * var(--ui-scale)); font-variant-numeric: tabular-nums; }
@@ -267,6 +275,29 @@
   }
   .menu-setting input[type="range"] { width: calc(150px * var(--ui-scale)); accent-color: #ffd23f; }
   #steerSensVal { min-width: calc(44px * var(--ui-scale)); color: #ffd23f; font-weight: 700; }
+
+  /* ================= 赛道选择（多赛道） ================= */
+  #trackList {
+    display: flex; gap: calc(18px * var(--ui-scale));
+    flex-wrap: wrap; justify-content: center;
+    max-width: 720px;
+  }
+  .track-card {
+    width: calc(210px * var(--ui-scale));
+    background: rgba(0,0,0,.35); border: 2px solid rgba(255,255,255,.25);
+    border-radius: 14px; padding: calc(12px * var(--ui-scale));
+    cursor: pointer; text-align: center;
+    transition: transform .1s ease, border-color .1s ease;
+  }
+  .track-card:hover { transform: translateY(-4px); border-color: #ffd23f; }
+  .track-card .track-preview {
+    width: 100%; height: calc(110px * var(--ui-scale));
+    border-radius: 8px; background: rgba(0,0,0,.2);
+    margin-bottom: calc(8px * var(--ui-scale));
+  }
+  .track-card .track-name { font-size: calc(18px * var(--ui-scale)); color: #ffd23f; font-weight: 800; }
+  .track-card .track-desc { font-size: calc(12px * var(--ui-scale)); color: #cfe6ff; line-height: 1.5; margin: calc(6px * var(--ui-scale)) 0; }
+  .track-card .track-best { font-size: calc(12px * var(--ui-scale)); color: #6fe36f; }
 </style>
 </head>
 <body data-state="menu">
@@ -291,6 +322,14 @@
     </div>
   </div>
 
+  <!-- ========== 赛道选择（多赛道） ========== -->
+  <div id="trackSelectOverlay" class="overlay hidden">
+    <div class="game-subtitle">选择赛道</div>
+    <div id="trackList"></div>
+    <div id="trackSelectHint" class="mp-status"></div>
+    <button id="trackBackBtn" class="btn secondary">返 回</button>
+  </div>
+
   <!-- ========== 结束界面（Step 3 完善） ========== -->
   <div id="finishedOverlay" class="overlay hidden">
     <div id="finishedTitle">比赛结束</div>
@@ -304,6 +343,7 @@
 
   <!-- ========== HUD（Step 3 起实时更新） ========== -->
   <div id="hud">
+    <button id="exitBtn" title="退出到赛道选择">✕</button>
     <div class="hud-top">
       <div id="lapText" class="hud-lap">Lap 0/3</div>
       <div id="timerText" class="hud-timer">00:00.0</div>
@@ -371,6 +411,103 @@ const STATE = Object.freeze({
 
 const TOTAL_LAPS = 3; // 比赛总圈数
 
+/* ================= 赛道配置（多赛道选择，集中管理便于调整） =================
+ * 字段说明：
+ *   id/name/desc       赛道标识、显示名、描述
+ *   enabled            是否可选（false = 后续扩展未开放）
+ *   points             赛道中心线控制点 [{x,y}]（Catmull-Rom 闭合采样）
+ *   straightW/cornerW  直道宽度 / 弯道宽度（px）
+ *   start              起点线位置 {x, y}
+ *   friction           路面摩擦系数（影响滑行衰减，1=正常；<1 更滑如冰面）
+ *   steerFactor        转向灵敏度系数（冰面 0.6 → -40%）
+ *   offTrackDrag       出界拖拽强度（沙漠沙地更高）
+ *   colors             视觉配色 { grass 草地/背景, road 路面, roadEdge 边线,
+ *                        curbSharp 急弯路肩, curbGentle 缓弯路肩, tree 树木 }
+ *   treeDensity        树木数量（沙漠为 0）
+ *   sandZones          沙地减速区 [{x, y, rx, ry}]（驶入额外减速）
+ */
+const trackConfigs = {
+  forest: {
+    id: 'forest',
+    name: '🌿 翠绿森林',
+    desc: '急弯多、路面窄、树木遮挡视野，需要频繁漂移',
+    enabled: true,
+    straightW: 90,
+    cornerW: 50,
+    start: { x: 200, y: 476 },
+    friction: 1,
+    steerFactor: 1,
+    offTrackDrag: 2.5,
+    colors: {
+      grass: '#2f7d32', road: '#4a5058', roadEdge: '#e8e8e8',
+      curbSharp: '#e0402e', curbGentle: '#3aa0ff', tree: '#1f5d24'
+    },
+    treeDensity: 40,
+    sandZones: [],
+    points: [
+      { x: 155, y: 475 }, { x: 210, y: 476 }, { x: 300, y: 478 },
+      { x: 440, y: 500 }, { x: 580, y: 488 }, { x: 720, y: 478 }, { x: 780, y: 477 },
+      { x: 835, y: 475 }, { x: 875, y: 464 }, { x: 904, y: 435 }, { x: 915, y: 395 },
+      { x: 904, y: 355 }, { x: 875, y: 326 }, { x: 835, y: 315 },
+      { x: 775, y: 317 }, { x: 700, y: 318 }, { x: 560, y: 292 }, { x: 420, y: 318 },
+      { x: 280, y: 315 }, { x: 210, y: 316 },
+      { x: 155, y: 315 }, { x: 115, y: 326 }, { x: 86, y: 355 }, { x: 75, y: 395 },
+      { x: 86, y: 435 }, { x: 115, y: 464 }
+    ]
+  },
+  desert: {
+    id: 'desert',
+    name: '🏜️ 炙热沙漠',
+    desc: '超长直道与沙地减速区，考验极速与道具时机',
+    enabled: true,
+    straightW: 110,
+    cornerW: 70,
+    start: { x: 220, y: 480 },
+    friction: 1.05,
+    steerFactor: 1,
+    offTrackDrag: 4, // 沙地拖拽更强
+    colors: {
+      grass: '#d9b36a', road: '#8a6f4d', roadEdge: '#f2e2b0',
+      curbSharp: '#c94f22', curbGentle: '#f2a03d', tree: '#7a9c3e'
+    },
+    treeDensity: 0,
+    sandZones: [
+      { x: 420, y: 480, rx: 60, ry: 26 },
+      { x: 620, y: 480, rx: 55, ry: 24 },
+      { x: 180, y: 320, rx: 58, ry: 24 }
+    ],
+    points: [
+      // 底部超长直道（600px）
+      { x: 180, y: 480 }, { x: 340, y: 480 }, { x: 520, y: 480 }, { x: 680, y: 480 }, { x: 780, y: 480 },
+      // 右侧 U 弯（中心 780,400，半径 80）
+      { x: 836, y: 455 }, { x: 860, y: 400 }, { x: 836, y: 345 }, { x: 780, y: 320 },
+      // 顶部直道（左向）
+      { x: 620, y: 320 }, { x: 440, y: 320 }, { x: 260, y: 320 }, { x: 180, y: 320 },
+      // 左侧 U 弯（中心 180,400，半径 80）
+      { x: 124, y: 345 }, { x: 100, y: 400 }, { x: 124, y: 455 }
+    ]
+  },
+  ice: {
+    id: 'ice',
+    name: '❄️ 冰雪王国',
+    desc: '冰面摩擦极低，转向灵敏度下降 40%（后续版本开放）',
+    enabled: false, // 后续扩展
+    straightW: 100,
+    cornerW: 60,
+    start: { x: 200, y: 476 },
+    friction: 0.35,     // 极低摩擦
+    steerFactor: 0.6,   // 转向 -40%
+    offTrackDrag: 1.5,
+    colors: {
+      grass: '#dfefff', road: '#9db8d9', roadEdge: '#ffffff',
+      curbSharp: '#ff6b6b', curbGentle: '#7aa8ff', tree: '#e8f4ff'
+    },
+    treeDensity: 0,
+    sandZones: [],
+    points: [] // 复用翠绿森林的弯道布局（后续定义独立赛道）
+  }
+};
+
 /* ================= Storage：本地存储（Step 8 实现排行榜） ================= */
 const Storage = {
   /** 保存一条比赛成绩：{laps, totalMs, date} */
@@ -391,6 +528,21 @@ const Storage = {
   },
   _write(list) {
     try { localStorage.setItem('marioKart.records', JSON.stringify(list)); } catch (e) {}
+  },
+  /** 保存某赛道的最佳圈速（仅当更快时写入） */
+  saveBestLap(trackId, lapMs) {
+    try {
+      const key = 'marioKart.bestLap.' + trackId;
+      const prev = parseFloat(localStorage.getItem(key)) || Infinity;
+      if (lapMs < prev) localStorage.setItem(key, String(Math.round(lapMs)));
+    } catch (e) { /* 忽略 */ }
+  },
+  /** 读取某赛道的最佳圈速（ms；无记录返回 null） */
+  loadBestLap(trackId) {
+    try {
+      const v = parseFloat(localStorage.getItem('marioKart.bestLap.' + trackId));
+      return isFinite(v) && v > 0 ? v : null;
+    } catch (e) { return null; }
   }
 };
 
@@ -506,36 +658,27 @@ const Track = {
   totalLen: 0,     // 赛道中心线总长
 
   /**
-   * 生成赛道：18 个控制点闭合曲线（Catmull-Rom 采样）
-   * 形状：底部长直道(S1) → 右侧 U 型发夹弯 → 顶部直道(S2) → 左侧 U 型发夹弯
-   * 宽度：直道 100px，弯道 60px
+   * 按配置生成赛道（多赛道支持）：
+   * 控制点来自 config.points；宽度按控制点转角自动分类（急弯→cornerW，直道→straightW），
+   * 也可在控制点上显式指定 w 覆盖。
    */
-  build() {
-    this.ctrl = [
-      // 底部直道（含 S 弯 S1）：起点线在左侧，方向向右
-      { x: 155, y: 475, w: 100 }, { x: 210, y: 476, w: 100 },
-      { x: 300, y: 478, w: 100 },
-      { x: 440, y: 500, w: 60 },  // S1 弯心（收窄）
-      { x: 580, y: 488, w: 100 }, { x: 720, y: 478, w: 100 },
-      { x: 780, y: 477, w: 100 },
-      // 右侧 U 型发夹弯（半径 80，中心 835,395；30° 间隔 7 点，避免样条收窄）
-      { x: 835, y: 475, w: 60 },  { x: 875, y: 464, w: 60 },
-      { x: 904, y: 435, w: 60 },  { x: 915, y: 395, w: 60 },
-      { x: 904, y: 355, w: 60 },  { x: 875, y: 326, w: 60 },
-      { x: 835, y: 315, w: 60 },
-      // 顶部直道（含 S 弯 S2，方向向左）
-      { x: 775, y: 317, w: 100 }, { x: 700, y: 318, w: 100 },
-      { x: 560, y: 292, w: 60 },  // S2 弯心（收窄）
-      { x: 420, y: 318, w: 100 }, { x: 280, y: 315, w: 100 },
-      { x: 210, y: 316, w: 100 },
-      // 左侧 U 型发夹弯（半径 80，中心 155,395；30° 间隔 7 点）
-      { x: 155, y: 315, w: 60 },  { x: 115, y: 326, w: 60 },
-      { x: 86, y: 355, w: 60 },   { x: 75, y: 395, w: 60 },
-      { x: 86, y: 435, w: 60 },   { x: 115, y: 464, w: 60 }
-    ];
+  build(cfg) {
+    this.config = cfg || trackConfigs.forest;
+    const c = this.config;
+    const raw = c.points;
+    const n = raw.length;
+    this.ctrl = raw.map((p, i) => {
+      if (p.w) return { x: p.x, y: p.y, w: p.w }; // 显式宽度优先
+      const a = raw[(i - 1 + n) % n], b = p, cc = raw[(i + 1) % n];
+      const angA = Math.atan2(b.y - a.y, b.x - a.x);
+      const angC = Math.atan2(cc.y - b.y, cc.x - b.x);
+      let d = Math.abs(angC - angA);
+      while (d > Math.PI) d = Math.abs(d - 2 * Math.PI);
+      const isCorner = d > 0.35; // 转角 > ~20° 视为弯道
+      return { x: b.x, y: b.y, w: isCorner ? c.cornerW : c.straightW };
+    });
 
     // ---- Catmull-Rom 闭合采样 ----
-    const n = this.ctrl.length;
     const STEP = 8; // 采样间距 px
     this.pts = [];
     for (let i = 0; i < n; i++) {
@@ -575,31 +718,48 @@ const Track = {
       const a = this.pts[i], b = this.pts[(i + 1) % m];
       this.totalLen += Math.hypot(b.x - a.x, b.y - a.y);
     }
-    // 起点线：底部直道 x≈200 处
+    // 起点线：按配置的 start 位置找最近采样点
     let best = 0, bd = 1e9;
+    const sx = c.start.x, sy = c.start.y;
     for (let i = 0; i < m; i++) {
-      const d = (this.pts[i].x - 200) ** 2 + (this.pts[i].y - 475) ** 2;
+      const d = (this.pts[i].x - sx) ** 2 + (this.pts[i].y - sy) ** 2;
       if (d < bd) { bd = d; best = i; }
     }
     this.startIdx = best;
+    this.sandZones = c.sandZones || [];
     this._buildDecorations();
   },
 
-  /** 生成树木与观众席（确定性随机，避开赛道） */
+  /** 生成树木与观众席（确定性随机，避开赛道；数量按赛道配置，沙漠无树） */
   _buildDecorations() {
+    const c = this.config;
     const rng = mulberry32(20240501);
     this.trees = [];
-    for (let i = 0; i < 500 && this.trees.length < 30; i++) {
+    const maxTrees = c.treeDensity || 0;
+    for (let i = 0; i < 500 && this.trees.length < maxTrees; i++) {
       const x = rng() * CANVAS_W, y = rng() * CANVAS_H;
       const near = this.nearest(x, y);
       if (near.dist < near.hw + 36) continue; // 离赛道太近
       this.trees.push({ x, y, r: 5 + rng() * 6, shade: rng() });
     }
-    // 观众席：底部直道旁 + 顶部直道旁
-    this.grandstands = [
+    // 观众席：仅森林赛道放置
+    this.grandstands = c.treeDensity > 0 ? [
       { x: 200, y: 532, w: 300, h: 56 },
       { x: 560, y: 240, w: 260, h: 44 }
-    ];
+    ] : [];
+  },
+
+  /** 赛道统计（供自动化测试/调试）：急弯数量、最长直道长度（px） */
+  stats() {
+    let sharpCorners = 0, longestStraight = 0, cur = 0;
+    const n = this.pts.length;
+    for (let i = 0; i <= n; i++) {
+      const k = this.pts[i % n].curv;
+      if (k > 0.005) { sharpCorners++; cur = 0; }
+      else cur += 8; // 每采样约 8px
+      if (cur > longestStraight) longestStraight = cur;
+    }
+    return { sharpCorners, longestStraight: Math.round(longestStraight), totalLen: Math.round(this.totalLen) };
   },
 
   /** 查找离 (x,y) 最近的采样点 */
@@ -623,9 +783,11 @@ const Track = {
   /* ================= 绘制 ================= */
   draw(ctx) {
     this._drawDecorations(ctx);
+    this._drawSandZones(ctx);
     const pts = this.pts, m = pts.length;
+    const col = this.config.colors;
 
-    // 1) 沥青路面（左右边缘围合多边形）
+    // 1) 路面（颜色随赛道配置）
     ctx.beginPath();
     for (let i = 0; i <= m; i++) {
       const p = pts[i % m];
@@ -637,13 +799,13 @@ const Track = {
       ctx.lineTo(p.x - p.nx * p.hw, p.y - p.ny * p.hw);
     }
     ctx.closePath();
-    ctx.fillStyle = '#5d6066';
+    ctx.fillStyle = col.road;
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,.3)';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 2) 路肩：急弯红白 / 缓弯蓝白（画在沥青外侧）
+    // 2) 路肩：急弯/缓弯配色（画在沥青外侧）
     const CURB_W = 8;
     for (let pass = 0; pass < 2; pass++) {
       const sign = pass === 0 ? 1 : -1; // 左缘 +1 / 右缘 -1
@@ -651,9 +813,9 @@ const Track = {
         const p = pts[i], q = pts[(i + 1) % m];
         const k = (p.curv + q.curv) / 2;
         if (k < 0.0016) continue; // 直道无路肩
-        const sharp = k > 0.005; // 急弯（U 弯）红白，缓弯（S 弯）蓝白
+        const sharp = k > 0.005; // 急弯 / 缓弯
         ctx.strokeStyle = (i % 2 === 0)
-          ? (sharp ? '#e0402e' : '#3aa0ff')
+          ? (sharp ? col.curbSharp : col.curbGentle)
           : '#f4f4f4';
         ctx.lineWidth = CURB_W;
         ctx.beginPath();
@@ -665,10 +827,10 @@ const Track = {
       }
     }
 
-    // 3) 白色边缘线（沥青内侧）
+    // 3) 路面边线（沥青内侧）
     for (let pass = 0; pass < 2; pass++) {
       const sign = pass === 0 ? 1 : -1;
-      ctx.strokeStyle = 'rgba(255,255,255,.9)';
+      ctx.strokeStyle = col.roadEdge;
       ctx.lineWidth = 2;
       ctx.beginPath();
       for (let i = 0; i <= m; i++) {
@@ -696,6 +858,20 @@ const Track = {
     this._drawStartLine(ctx);
   },
 
+  /** 沙地减速区（沙漠）：绘制为浅色沙斑，驶入额外减速 */
+  _drawSandZones(ctx) {
+    for (const z of this.sandZones) {
+      ctx.fillStyle = 'rgba(242,214,150,.55)';
+      ctx.beginPath();
+      ctx.ellipse(z.x, z.y, z.rx, z.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.25)';
+      ctx.beginPath();
+      ctx.ellipse(z.x + 6, z.y - 4, z.rx * 0.4, z.ry * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  },
+
   /** 起点线：黑白方格带 */
   _drawStartLine(ctx) {
     const p = this.pts[this.startIdx];
@@ -715,10 +891,11 @@ const Track = {
     }
   },
 
-  /** 装饰：草地圆点树 + 观众席彩色小方块 */
+  /** 装饰：树木（颜色随赛道配置）+ 观众席彩色小方块 */
   _drawDecorations(ctx) {
+    const treeCol = this.config.colors.tree;
     for (const t of this.trees) {
-      ctx.fillStyle = t.shade < 0.5 ? '#2f7d32' : '#27712c';
+      ctx.fillStyle = t.shade < 0.5 ? treeCol : shadeHex(treeCol, -12);
       ctx.beginPath();
       ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2);
       ctx.fill();
@@ -743,6 +920,15 @@ const Track = {
     }
   }
 };
+
+/** 十六进制颜色加减亮度（装饰用），返回 #rrggbb */
+function shadeHex(hex, delta) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.min(255, (n >> 16) + delta));
+  const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + delta));
+  const b = Math.max(0, Math.min(255, (n & 0xff) + delta));
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
 
 /* ================= Vehicle：车辆基类（位置/速度/角度/转向/边界碰撞） ================= */
 class Vehicle {
@@ -774,9 +960,10 @@ class Vehicle {
     this.slowTimer = 0;        // 香蕉减速剩余时间（秒）
   }
 
-  /** 转向：速度越快转向越“重”；漂移时灵敏度 ×1.6（转弯半径变小） */
+  /** 转向：速度越快转向越“重”；漂移时灵敏度 ×1.6；受赛道转向系数影响（冰面 -40%） */
   steer(dir, dt, mult) {
-    const turn = 3.2 * (1 - 0.5 * (this.speed / this.maxSpeed)) * (mult || 1);
+    const steerFactor = Track.config ? Track.config.steerFactor : 1;
+    const turn = 3.2 * (1 - 0.5 * (this.speed / this.maxSpeed)) * (mult || 1) * steerFactor;
     this.angle += dir * turn * dt;
   }
 
@@ -791,9 +978,12 @@ class Vehicle {
     this.speed = Math.min(this.maxSpeed, this.speed + rate * dt);
   }
 
-  /** 刹车 / 无输入滑行 */
+  /** 刹车 / 无输入滑行（滑行衰减受赛道摩擦系数影响，冰面更低摩擦 → 滑行更远） */
   brake(dt) { this.speed = Math.max(0, this.speed - 260 * dt); }
-  coast(dt) { this.speed *= Math.exp(-0.45 * dt); }
+  coast(dt) {
+    const friction = Track.config ? Track.config.friction : 1;
+    this.speed *= Math.exp(-0.45 * friction * dt);
+  }
 
   /**
    * 位置积分 + 道具效果 + 边界碰撞处理
@@ -837,7 +1027,9 @@ class Vehicle {
       const wasOff = this.offTrack;
       this.offTrack = true;
       if (!wasOff) this.speed *= 0.75;   // 刚出界：瞬时减速 25%（≥ PRD 要求的 20%）
-      this.speed *= Math.exp(-2.5 * dt); // 出界持续强减速
+      // 出界持续强减速（拖拽强度随赛道配置，沙漠沙地更强）
+      const offDrag = Track.config ? Track.config.offTrackDrag : 2.5;
+      this.speed *= Math.exp(-offDrag * dt);
       // 拉回赛道边缘（沿法线向内推）
       const push = near.dist - limit;
       const inv = near.dist > 0.0001 ? 1 / near.dist : 0;
@@ -845,6 +1037,17 @@ class Vehicle {
       this.y -= near.dy * inv * push;
     } else {
       this.offTrack = false;
+    }
+    // 沙地减速区（沙漠）：驶入额外减速
+    const zones = track.sandZones;
+    if (zones && zones.length) {
+      for (const z of zones) {
+        const dx = (this.x - z.x) / z.rx, dy = (this.y - z.y) / z.ry;
+        if (dx * dx + dy * dy < 1) {
+          this.speed *= Math.exp(-1.5 * dt);
+          break;
+        }
+      }
     }
     this.lastOnIdx = near.idx;
     // 圈数进度更新（4 检测点：起点 + 25%/50%/75%），返回是否完成一圈
@@ -1215,12 +1418,15 @@ class Game {
     this.playerName = '玩家';   // 本机玩家名
     this.publishTick = 0;       // 状态发布节流计数（每 4 帧 = 15Hz）
     this.globalRaceState = null;// 全局比赛状态（房主写入）
+    // ---- 多赛道选择（Track Select） ----
+    this.trackConfig = trackConfigs.forest; // 当前赛道配置（默认翠绿森林）
+    this.waitingTrack = false;              // 联机非房主：等待房主选择赛道
   }
 
   /** 初始化：绑定按钮、生成赛道 / AI / 道具箱、绑定键盘、启动主循环 */
   init() {
     HUD.init();
-    Track.build();
+    Track.build(this.trackConfig); // 按当前赛道配置生成
     this.track = Track; // 供测试与内部模块引用
     PowerUp.build(Track);
     // 创建 3 辆 AI（蓝/绿/黄，位于玩家后方发车位）
@@ -1229,10 +1435,23 @@ class Game {
       new AI(320, 475, '#6fe36f', 2),
       new AI(365, 475, '#ffd23f', 3)
     ];
-    // 菜单：联机对战（insertCoin 加入房间） / 单人游戏（直接开局）
+    // 菜单：联机对战（insertCoin 加入房间） / 单人游戏（先选赛道）
     document.getElementById('startBtn').addEventListener('click', () => this.startMultiplayer());
-    document.getElementById('soloBtn').addEventListener('click', () => this.start());
+    document.getElementById('soloBtn').addEventListener('click', () => this.showTrackSelect());
     document.getElementById('restartBtn').addEventListener('click', () => this.restart());
+    // HUD 退出按钮：回到赛道选择
+    document.getElementById('exitBtn').addEventListener('click', () => this.exitToTrackSelect());
+    // 赛道选择：返回菜单
+    document.getElementById('trackBackBtn').addEventListener('click', () => {
+      document.getElementById('trackSelectOverlay').classList.add('hidden');
+      document.getElementById('menuOverlay').classList.remove('hidden');
+    });
+    // 比赛中退出到赛道选择（ESC 键）
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && (this.state === STATE.RACING || this.state === STATE.FINISHED)) {
+        this.exitToTrackSelect();
+      }
+    });
     // 转向灵敏度滑块（P1-8）：实时生效 + localStorage 持久化
     const sensInput = document.getElementById('steerSens');
     const sensVal = document.getElementById('steerSensVal');
@@ -1314,7 +1533,8 @@ class Game {
       this._mpNotice(Multiplayer.roomCode ? '已加入房间：' + Multiplayer.roomCode + '，准备比赛！' : '已加入房间，准备比赛！');
       this.multiplayerMode = true;
       this._setupMultiplayer();
-      this.start();
+      // 联机：进入赛道选择（房主选择并广播；非房主等待房主选择）
+      this.showTrackSelect();
     } catch (e) {
       btn.disabled = false;
       btn.textContent = '联 机 对 战';
@@ -1429,7 +1649,7 @@ class Game {
     if (changed) Multiplayer.setGlobal('grid', grid);
   }
 
-  /** 本机发车位坐标（底部直道 4 槽位；房主未分配时按 id 哈希兜底，避免挤占槽 0） */
+  /** 本机发车位坐标（沿当前赛道起点向后 4 槽位；房主未分配时按 id 哈希兜底） */
   _gridPosition() {
     const grid = Multiplayer.getGlobal('grid') || {};
     let slot = grid[this.myPlayerId];
@@ -1439,8 +1659,8 @@ class Game {
       for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
       slot = h % 4;
     }
-    const slots = [230, 275, 320, 365];
-    return { x: slots[slot % 4], y: 475 };
+    const start = this.trackConfig.start;
+    return { x: start.x + slot * 45, y: start.y };
   }
 
   /** 发布本机车辆状态（约 15Hz，Step 3 数据结构 + Step 5 输入/道具事件） */
@@ -1541,6 +1761,102 @@ class Game {
     el.className = 'mp-status' + (isErr ? ' err' : '');
   }
 
+  /* ================= 多赛道选择（Track Select） ================= */
+
+  /** 显示赛道选择界面（开始游戏前） */
+  showTrackSelect() {
+    this.waitingTrack = this.multiplayerMode && !Multiplayer.isHost(); // 联机非房主等待房主选择
+    this._renderTrackList();
+    document.getElementById('trackSelectHint').textContent =
+      this.waitingTrack ? '等待房主选择赛道…' : '点击卡片选择赛道开始比赛';
+    document.getElementById('trackSelectOverlay').classList.remove('hidden');
+    document.getElementById('menuOverlay').classList.add('hidden');
+  }
+
+  /** 渲染赛道卡片列表（名称/描述/Canvas 预览/该赛道最佳圈速） */
+  _renderTrackList() {
+    const listEl = document.getElementById('trackList');
+    listEl.innerHTML = '';
+    for (const id in trackConfigs) {
+      const cfg = trackConfigs[id];
+      if (!cfg.enabled) continue; // 仅列出已开放赛道（冰雪为后续扩展）
+      const card = document.createElement('div');
+      card.className = 'track-card';
+      card.setAttribute('data-track', id);
+      const best = Storage.loadBestLap(id);
+      card.innerHTML =
+        '<canvas class="track-preview" width="210" height="110"></canvas>' +
+        '<div class="track-name">' + cfg.name + '</div>' +
+        '<div class="track-desc">' + cfg.desc + '</div>' +
+        '<div class="track-best">最佳圈速：' + (best ? formatTime(best) : '--') + '</div>';
+      card.addEventListener('click', () => this.selectTrack(id));
+      listEl.appendChild(card);
+      this._drawTrackPreview(card.querySelector('.track-preview'), cfg);
+    }
+  }
+
+  /** Canvas 绘制赛道预览（缩略俯视图，装饰用） */
+  _drawTrackPreview(canvas, cfg) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    // 先临时用该配置构建一份几何（不改变当前赛道）
+    const tmp = Object.create(Track);
+    tmp.build(cfg);
+    ctx.fillStyle = cfg.colors.grass;
+    ctx.fillRect(0, 0, W, H);
+    // 缩放映射（复用 Track.nearest 的 pts）
+    let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+    for (const p of tmp.pts) {
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }
+    const pad = 10;
+    const s = Math.min((W - pad * 2) / (maxX - minX), (H - pad * 2) / (maxY - minY));
+    const ox = (W - (maxX - minX) * s) / 2 - minX * s;
+    const oy = (H - (maxY - minY) * s) / 2 - minY * s;
+    const mx = x => x * s + ox, my = y => y * s + oy;
+    ctx.strokeStyle = cfg.colors.road;
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i <= tmp.pts.length; i++) {
+      const p = tmp.pts[i % tmp.pts.length];
+      if (i === 0) ctx.moveTo(mx(p.x), my(p.y)); else ctx.lineTo(mx(p.x), my(p.y));
+    }
+    ctx.stroke();
+  }
+
+  /** 选择赛道：应用配置 → 重置全部状态 → 开始比赛（联机房主广播） */
+  selectTrack(id) {
+    const cfg = trackConfigs[id];
+    if (!cfg || !cfg.enabled) return;
+    if (this.multiplayerMode) {
+      // 联机：仅房主的选择生效并广播；非房主等待房主选择
+      if (Multiplayer.isHost()) Multiplayer.setGlobal('track', id);
+      else return;
+    }
+    this._applyTrack(cfg);
+  }
+
+  /** 应用赛道配置（完全重置：位置/圈数/道具/计时/排名） */
+  _applyTrack(cfg) {
+    this.trackConfig = cfg;
+    Track.build(cfg);       // 重建赛道几何与装饰
+    PowerUp.build(Track);   // 道具箱随新赛道重建
+    this.waitingTrack = false;
+    document.getElementById('trackSelectOverlay').classList.add('hidden');
+    this.start();           // reset() → 全部状态归零 → racing
+  }
+
+  /** 退出到赛道选择（ESC 键或 HUD 退出按钮，供切换赛道） */
+  exitToTrackSelect() {
+    this.setState(STATE.MENU);
+    HUD.showHud(false);
+    document.getElementById('finishedOverlay').classList.add('hidden');
+    this.showTrackSelect();
+  }
+
   /** 结束比赛：显示成绩并写入排行榜 */
   finish() {
     this.setState(STATE.FINISHED);
@@ -1606,14 +1922,14 @@ class Game {
     this.prevOffTrack = false;
     this.splitTimer = 0;
     PowerUp.build(this.track);
-    // 玩家回到起点（联机模式按房主分配的发车位）
+    // 玩家回到起点（联机按房主分配的发车位；单机按当前赛道配置的起点）
     if (this.multiplayerMode) {
       const gp = this._gridPosition();
       this.player.x = gp.x;
       this.player.y = gp.y;
     } else {
-      this.player.x = 230;
-      this.player.y = 475;
+      this.player.x = this.trackConfig.start.x;
+      this.player.y = this.trackConfig.start.y;
     }
     this.player.angle = 0;
     this.player.speed = 0;
@@ -1685,6 +2001,11 @@ class Game {
 
   /** 逻辑更新：玩家 + AI 驾驶、道具、碰撞、排名、反馈、联机同步 */
   update(dt) {
+    // 联机非房主：等待房主选择赛道（全局 'track' 出现后自动应用并开赛）
+    if (this.waitingTrack && this.multiplayerMode && !Multiplayer.isHost()) {
+      const tid = Multiplayer.getGlobal('track');
+      if (tid && trackConfigs[tid]) this._applyTrack(trackConfigs[tid]);
+    }
     if (this.state === STATE.RACING) {
       this.raceTimeMs += dt * 1000;
       HUD.setTimer(this.raceTimeMs);
@@ -1782,8 +2103,8 @@ class Game {
       for (const c of cars) {
         if (c === s.owner) continue;
         if (Math.hypot(c.x - s.x, c.y - s.y) < 15) {
-          // 效果只作用于本机车辆（远程受击由其所属端处理，最终一致性）
-          if (c === this.player) {
+          // 本地实体（玩家 + 本地 AI，无 rp 标记）受击生效；远程伪车辆由所属端处理（最终一致性）
+          if (!c.rp) {
             c.slipTimer = 1; // 打滑 1 秒
             c.speed *= 0.5;
             AudioManager.playCrash();
@@ -1808,7 +2129,8 @@ class Game {
       let hit = false;
       for (const c of cars) {
         if (Math.hypot(c.x - b.x, c.y - b.y) < 15) {
-          if (c === this.player) {
+          // 本地实体（玩家 + 本地 AI）受击生效；远程伪车辆由所属端处理（最终一致性）
+          if (!c.rp) {
             c.speed *= 0.4;   // 减速 60%
             c.slowTimer = 0.5;
             AudioManager.playCrash();
@@ -1925,13 +2247,15 @@ class Game {
     }
   }
 
-  /** 完成一圈：记录用时，分段计时对比，更新 HUD，3 圈触发结束 */
+  /** 完成一圈：记录用时，分段计时对比，保存该赛道最佳圈速，3 圈触发结束 */
   _onLapComplete() {
     const lapMs = this.raceTimeMs - this.lapStartMs;
     const prevBest = this.bestLapMs;
     this.lapStartMs = this.raceTimeMs;
     this.lapTimes.push(lapMs);
     if (lapMs < this.bestLapMs) this.bestLapMs = lapMs;
+    // 多赛道：按赛道独立存储最佳圈速（T16/T17）
+    Storage.saveBestLap(this.trackConfig.id, lapMs);
     this.lap = this.player.lap;
     HUD.setLap(this.lap, TOTAL_LAPS);
     // 分段计时：本圈用时 vs 历史最佳（绿色快 / 红色慢），显示 4 秒
@@ -1968,8 +2292,8 @@ class Game {
     }
     ctx.save();
     ctx.translate(ox, oy);
-    // 草地底色
-    ctx.fillStyle = '#3f9b3f';
+    // 草地底色（颜色随赛道配置，如沙漠为沙黄色）
+    ctx.fillStyle = Track.config ? Track.config.colors.grass : '#3f9b3f';
     ctx.fillRect(-10, -10, CANVAS_W + 20, CANVAS_H + 20);
     // 草地噪点（浅色圆点），增强视觉层次
     ctx.fillStyle = 'rgba(255,255,255,0.06)';

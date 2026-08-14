@@ -27,6 +27,7 @@ const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleW
     if (r.scale === '1.000' || r.scale === '1') ok('PC 端 --ui-scale=1（UI 无缩放）'); else fail('PC 缩放异常: ' + r.scale);
     // 键盘仍然可用
     await page.click('#soloBtn');
+    await page.click('.track-card'); // 进入赛道选择 → 默认第一条赛道
     await page.keyboard.down('ArrowUp');
     await page.waitForTimeout(800);
     await page.keyboard.up('ArrowUp');
@@ -74,6 +75,7 @@ const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleW
     else fail('UI 缩放异常: ' + base.scale + ' (期望 ~' + expectedScale.toFixed(3) + ')');
 
     await page.click('#soloBtn');
+    await page.click('.track-card'); // 进入赛道选择 → 默认第一条赛道
     await page.waitForTimeout(200);
 
     // 加速按钮

@@ -47,6 +47,8 @@ async function injectFake(page, { isHostPlayer = true } = {}) {
 /** 点击联机对战并等待进入比赛 */
 async function startMultiplayer(page) {
   await page.click('#startBtn');
+  await page.waitForSelector('#trackSelectOverlay:not(.hidden)', { timeout: 5000 });
+  await page.click('.track-card'); // 房主选择赛道 → 开赛
   await page.waitForFunction(() => document.body.getAttribute('data-state') === 'racing', null, { timeout: 5000 });
 }
 

@@ -18,6 +18,8 @@ const { chromium } = require('@playwright/test');
 
   console.log('--- E2E-1: 房主创建房间（?mp=host, skipLobby） ---');
   await pageA.goto(BASE + '?mp=host');
+  await pageA.waitForSelector('#trackSelectOverlay:not(.hidden)', { timeout: 30000 });
+  await pageA.click('.track-card'); // 房主选择赛道 → 广播并开赛
   await pageA.waitForFunction(() => document.body.getAttribute('data-state') === 'racing', null, { timeout: 30000 });
   const host = await pageA.evaluate(() => ({
     roomCode: window.__MULTIPLAYER__.roomCode,

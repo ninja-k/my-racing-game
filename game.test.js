@@ -11,7 +11,8 @@ const URL = 'file://' + path.resolve(__dirname, 'index.html');
 async function startRace(page) {
   await page.goto(URL);
   await page.waitForTimeout(300);
-  await page.click('#soloBtn');
+  await page.click('#soloBtn');       // 单人游戏 → 赛道选择
+  await page.click('.track-card');    // 默认选择第一条赛道（翠绿森林）
 }
 
 /**
@@ -221,4 +222,132 @@ test('T11 重新开始：点击重开，所有状态归零', async ({ page }) =>
   await page.waitForTimeout(700);
   const t2 = await page.textContent('#timerText');
   expect(t1).not.toBe(t2);
+});
+
+/* =========================================================================
+ * 多赛道选择测试（T12~T17）
+ * ========================================================================= */
+
+/* ---------------- T12 赛道选择界面 ---------------- */
+test('T12 赛道选择：显示翠绿森林与炙热沙漠及描述', async ({ page }) => {
+  await page.goto(URL);
+  await page.waitForTimeout(300);
+  await page.click('#soloBtn'); // 单人游戏 → 赛道选择
+  await expect(page.locator('#trackSelectOverlay')).toBeVisible();
+  const cards = page.locator('.track-card');
+  await expect(cards).toHaveCount(2); // 冰雪王国未开放，仅 2 条
+  await expect(page.locator('.track-card[data-track="forest"] .track-name')).toContainText('翠绿森林');
+  await expect(page.locator('.track-card[data-track="desert"] .track-name')).toContainText('炙热沙漠');
+  await expect(page.locator('.track-card[data-track="forest"] .track-desc')).not.toBeEmpty();
+  await expect(page.locator('.track-card[data-track="desert"] .track-desc')).not.toBeEmpty();
+  // 每条卡片含最佳圈速占位
+  await expect(page.locator('.track-card[data-track="forest"] .track-best')).toContainText('--');
+});
+
+/* ---------------- T13 翠绿森林：绿色为主、弯道多 ---------------- */
+test('T13 翠绿森林：绿色为主、急弯多', async ({ page }) => {
+  await page.goto(URL);
+  await page.waitForTimeout(300);
+  await page.click('#soloBtn');
+  await page.click('.track-card[data-track="forest"]');
+  await expect(page.locator('body')).toHaveAttribute('data-state', 'racing');
+  const r = await page.evaluate(() => {
+    const g = window.__GAME__;
+    g.render();
+    const d = g.ctx.getImageData(500, 100, 1, 1).data; // 草地上方采样
+    return {
+      pixel: [d[0], d[1], d[2]],
+      stats: Track.stats(),
+      treeCount: Track.trees.length
+    };
+  });
+  // 绿色为主：g 通道显著高于 r/b
+  expect(r.pixel[1]).toBeGreaterThan(r.pixel[0]);
+  expect(r.pixel[1]).toBeGreaterThan(r.pixel[2]);
+  // 弯道多：急弯（曲率>0.005）采样点较多
+  expect(r.stats.sharpCorners).toBeGreaterThanOrEqual(25);
+  // 森林树木较多（遮挡视野）
+  expect(r.treeCount).toBeGreaterThan(5);
+});
+
+/* ---------------- T14 炙热沙漠：黄色为主、长直道 ---------------- */
+test('T14 炙热沙漠：黄色为主、有长直道', async ({ page }) => {
+  await page.goto(URL);
+  await page.waitForTimeout(300);
+  await page.click('#soloBtn');
+  await page.click('.track-card[data-track="desert"]');
+  await expect(page.locator('body')).toHaveAttribute('data-state', 'racing');
+  const r = await page.evaluate(() => {
+    const g = window.__GAME__;
+    g.render();
+    const d = g.ctx.getImageData(500, 100, 1, 1).data;
+    return {
+      pixel: [d[0], d[1], d[2]],
+      stats: Track.stats()
+    };
+  });
+  // 沙黄色：r > g > b
+  expect(r.pixel[0]).toBeGreaterThan(r.pixel[1]);
+  expect(r.pixel[1]).toBeGreaterThan(r.pixel[2]);
+  expect(r.pixel[0]).toBeGreaterThan(150);
+  // 长直道 ≥ 350px（沙漠底部长直道约 600px）
+  expect(r.stats.longestStraight).toBeGreaterThanOrEqual(350);
+});
+
+/* ---------------- T15 切换赛道：状态完全重置 ---------------- */
+test('T15 切换赛道：位置/圈数/速度全部重置', async ({ page }) => {
+  await startRace(page); // 翠绿森林
+  await driveUntil(page, 1, 120); // 跑 1 圈
+  // 退出到赛道选择（ESC）
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#trackSelectOverlay')).toBeVisible();
+  // 切换到炙热沙漠
+  await page.click('.track-card[data-track="desert"]');
+  await expect(page.locator('body')).toHaveAttribute('data-state', 'racing');
+  const r = await page.evaluate(() => {
+    const g = window.__GAME__;
+    return {
+      x: Math.round(g.player.x),
+      y: Math.round(g.player.y),
+      lap: g.lap,
+      speed: g.player.speed,
+      raceTime: g.raceTimeMs,
+      trackId: g.trackConfig.id
+    };
+  });
+  expect(r.trackId).toBe('desert');
+  expect(r.x).toBe(220);            // 沙漠起点
+  expect(r.y).toBe(480);
+  expect(r.lap).toBe(0);
+  expect(r.speed).toBe(0);
+  expect(r.raceTime).toBeLessThan(2000); // 计时器归零后重新开始
+});
+
+/* ---------------- T16 赛道 A 最佳圈速存储 ---------------- */
+test('T16 完成 3 圈后，localStorage 存储该赛道最佳圈速', async ({ page }) => {
+  await startRace(page); // 翠绿森林
+  await driveUntil(page, -1, 300); // 跑完 3 圈
+  const best = await page.evaluate(() => localStorage.getItem('marioKart.bestLap.forest'));
+  expect(best).not.toBeNull();
+  const ms = parseFloat(best);
+  expect(ms).toBeGreaterThan(0);
+  expect(ms).toBeLessThan(120000); // 合理的圈速范围（< 2 分钟）
+});
+
+/* ---------------- T17 各赛道圈速独立存储 ---------------- */
+test('T17 切换赛道后最佳圈速独立存储（互不影响）', async ({ page }) => {
+  await startRace(page); // 翠绿森林
+  await driveUntil(page, -1, 300);
+  const forestBest = await page.evaluate(() => localStorage.getItem('marioKart.bestLap.forest'));
+  const desertBefore = await page.evaluate(() => localStorage.getItem('marioKart.bestLap.desert'));
+  expect(forestBest).not.toBeNull();
+  expect(desertBefore).toBeNull(); // 沙漠无记录
+  // 切到沙漠跑完
+  await page.keyboard.press('Escape');
+  await page.click('.track-card[data-track="desert"]');
+  await driveUntil(page, -1, 300);
+  const forestAfter = await page.evaluate(() => localStorage.getItem('marioKart.bestLap.forest'));
+  const desertAfter = await page.evaluate(() => localStorage.getItem('marioKart.bestLap.desert'));
+  expect(desertAfter).not.toBeNull();       // 沙漠记录独立生成
+  expect(forestAfter).toBe(forestBest);     // 森林记录未被覆盖
 });

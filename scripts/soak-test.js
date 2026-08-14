@@ -14,6 +14,7 @@ const path = require('path');
   await page.goto('file://' + path.resolve(__dirname, '..', 'index.html'));
   await page.waitForTimeout(300);
   await page.click('#soloBtn');
+    await page.click('.track-card'); // 进入赛道选择 → 默认第一条赛道
 
   // 自动导航 + 帧计数
   await page.evaluate(() => {

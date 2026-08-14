@@ -23,6 +23,7 @@ test('M-01 设备检测与触屏控件显示', async ({ page }) => {
 test('M-02 跟随式摇杆：底座出现在触摸点、比例转向、松手归零', async ({ page }) => {
   await page.goto(URL);
   await page.click('#soloBtn');
+    await page.click('.track-card'); // 进入赛道选择 → 默认第一条赛道
   await page.waitForTimeout(200);
   const r = await page.evaluate(() => {
     const g = window.__GAME__;
@@ -46,6 +47,7 @@ test('M-02 跟随式摇杆：底座出现在触摸点、比例转向、松手归
 test('M-03 加速/漂移/道具按钮：按下生效、无道具时道具按钮置灰', async ({ page }) => {
   await page.goto(URL);
   await page.click('#soloBtn');
+    await page.click('.track-card'); // 进入赛道选择 → 默认第一条赛道
   await page.waitForTimeout(200);
   const r = await page.evaluate(() => {
     const g = window.__GAME__;
@@ -70,6 +72,7 @@ test('M-03 加速/漂移/道具按钮：按下生效、无道具时道具按钮�
 test('M-04 滑动转向与上滑道具（摇杆外）', async ({ page }) => {
   await page.goto(URL);
   await page.click('#soloBtn');
+    await page.click('.track-card'); // 进入赛道选择 → 默认第一条赛道
   await page.waitForTimeout(200);
   const r = await page.evaluate(() => {
     const g = window.__GAME__;
@@ -120,6 +123,7 @@ test('M-06 竖屏提示：竖屏显示、横屏隐藏', async ({ page }) => {
 test('M-07 碰撞震动 50ms + 30fps 性能封顶', async ({ page }) => {
   await page.goto(URL);
   await page.click('#soloBtn');
+    await page.click('.track-card'); // 进入赛道选择 → 默认第一条赛道
   await page.waitForTimeout(200);
   const r = await page.evaluate(() => {
     window.__v = [];
